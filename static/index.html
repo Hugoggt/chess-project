@@ -1,35 +1,42 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>Mon site IA</title>
+  <title>Échiquier fonctionnel</title>
+  <!-- CSS Chessboard.js -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css"
+  />
   <style>
     body {
-      background-color: #f0f8ff; /* bleu clair */
-      font-family: Arial, sans-serif;
-      color: #333;
+      display: flex;
+      justify-content: center;  /* centre horizontal */
+      align-items: center;      /* centre vertical */
+      height: 100vh;
+      margin: 0;
+      background-color: #f0f0f0;
     }
-  </style></head>
+    #board {
+      width: 600px;  /* taille de l'échiquier */
+    }
+  </style>
+</head>
 <body>
-  <h1>Entre un nombre</h1>
-  <input type="number" id="inputNumber">
-  <button onclick="sendNumber()">Envoyer</button>
-  <p id="result"></p>
+
+  <div id="board"></div>
+
+  <!-- Librairie jQuery -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- JS Chessboard.js -->
+  <script src="https://unpkg.com/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 
   <script>
-    async function sendNumber() {
-      const number = document.getElementById("inputNumber").value;
-      const response = await fetch("/double", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ number: parseInt(number) })
-      });
-
-      const data = await response.json();
-      document.getElementById("result").innerText = "Résultat : " + data.result;
-    }
+    // Initialise l'échiquier avec la position de départ
+    var board = Chessboard('board', {
+      position: 'start',
+      draggable: true
+    });
   </script>
 </body>
 </html>
