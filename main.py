@@ -31,7 +31,7 @@ def play_move(move_req: dict):
             raise ValueError("Missing move")
 
         # Jouer le coup du joueur
-        board.push_san(move)  # ou board.push(chess.Move.from_uci(move)) selon ton usage
+        board.push(chess.Move.from_uci(move))
 
         # Vérifier si la partie est finie après le coup du joueur
         if board.is_game_over():
@@ -45,7 +45,7 @@ def play_move(move_req: dict):
         ai_move = choose_ai_move(board)
         board.push(ai_move)
 
-        # Retourner le résultat après le coup de l'IA
+        # Vérifier si la partie est finie après le coup de l'IA
         return {
             "fen": board.fen(),
             "ai_move": ai_move.uci(),
