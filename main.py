@@ -24,15 +24,16 @@ def get_board():
     return {"fen": board.fen(), "is_game_over": board.is_game_over(), "result": board.result() if board.is_game_over() else None}
 
 @app.post("/move")
-def play_move(move_req: MoveRequest):
-    global board
+def play_move(move_req: dict):
     try:
-        move = chess.Move.from_uci(move_req.uci)
-        if move not in board.legal_moves:
-            return JSONResponse({"error": "Illegal move"}, status_code=400)
-        board.push(move)
+        # suppose on fait un truc qui peut échouer
+        move = move_req.get("uci")
+        if move is None:
+            raise ValueError("Missing move")
+        # ici, ta logique pour jouer le coup
+        return {"status": "move played", "move": move}
     except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+        return JSONResponse(content={"error": str(e)}, status_code=400)
     
     # Si partie finie après le coup du joueur
     if board.is_game_over():
