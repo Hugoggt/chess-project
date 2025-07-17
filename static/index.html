@@ -1,61 +1,8 @@
 <!DOCTYPE html>
 <html lang="fr">
-<head>
-  <meta charset="UTF-8" />
-  <title>Échiquier fonctionnel</title>
-
-  <!-- CSS Chessboard.js via CDN -->
-  <link
-    rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/css/chessboard.min.css"
-  />
-
-  <style>
-    /* Centrer l'échiquier dans la page */
-    body, html {
-      height: 100%;
-      margin: 0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      background-color: #f0f0f0;
-    }
-    #board {
-      width: 500px;
-    }
-  </style>
-</head>
+<head><meta charset="UTF-8"><title>Test</title></head>
 <body>
-  <div id="board"></div>
-
-  <!-- JS dependencies via CDN -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/js/chessboard.min.js"></script>
-
-  <script>
-    // Initialise l'échiquier
-    const board = Chessboard('board', {
-      draggable: true,
-      dropOffBoard: 'snapback',
-      position: 'start'
-    });
-  </script>
+  <h1>Ça marche !</h1>
 </body>
 </html>
 
-  <div id="board"></div>
-
-  <!-- Librairie jQuery -->
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  <!-- JS Chessboard.js -->
-  <script src="https://unpkg.com/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
-
-  <script>
-    // Initialise l'échiquier avec la position de départ
-    var board = Chessboard('board', {
-      position: 'start',
-      draggable: true
-    });
-  </script>
-</body>
-</html>
