@@ -2,140 +2,92 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Jeu d'Échecs</title>
+  <title>Échecs en ligne</title>
   <style>
-    body {
-      background-color: #121826;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      color: #f0e6d2;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      margin: 0;
-      padding: 0;
-    }
-
-    h1 {
-      margin-top: 30px;
-      font-size: 2.5em;
-      color: #ffd700;
-      text-shadow: 1px 1px 5px #000;
-    }
-
-    #chessboard {
-      display: grid;
-      grid-template-columns: repeat(8, 70px);
-      grid-template-rows: repeat(8, 70px);
-      margin-top: 40px;
-      border: 4px solid #f0e6d2;
-      box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
-    }
-
-    .square {
-      width: 70px;
-      height: 70px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-size: 42px;
-      cursor: pointer;
-      transition: background-color 0.2s, transform 0.2s;
-    }
-
-    .white {
-      background-color: #f4e8c1;
-      color: #222;
-    }
-
-    .black {
-      background-color: #1e2a38;
-      color: #f0e6d2;
-    }
-
-    .square:hover {
-      transform: scale(1.03);
-    }
-
-    .selected {
-      outline: 3px solid #ffd700;
-      box-shadow: 0 0 10px #ffd700;
-    }
-
-    #status {
-      margin-top: 25px;
-      font-size: 1.2em;
-      padding: 10px 20px;
-      background-color: #1f2c3b;
-      border-radius: 8px;
-      border: 1px solid #ffd70088;
-      box-shadow: 0 0 10px rgba(255, 215, 0, 0.1);
-    }
+    body { background:#121826; color:#f0e6d2; text-align:center;
+           font-family:sans-serif; margin:0; padding:0; }
+    h1 { margin:20px; font-size:2.5em; color:#ffd700; }
+    #status { margin:10px auto; padding:10px 20px;
+              background:#1f2c3b; border:2px solid #ffd700;
+              border-radius:8px; width:max-content; }
+    #board { display:grid; grid:repeat(8,70px)/repeat(8,70px);
+              margin:20px auto; border:4px solid #f0e6d2;
+              box-shadow:0 0 20px rgba(255,215,0,0.3); }
+    .sq { display:flex; align-items:center; justify-content:center;
+           font-size:42px; cursor:pointer; transition:0.2s; }
+    .sq.white { background:#f4e8c1; color:#222; }
+    .sq.black { background:#1e2a38; color:#f0e6d2; }
+    .sq:hover { transform:scale(1.05); }
+    .selected { outline:3px solid #ffd700; box-shadow:0 0 10px #ffd700; }
   </style>
 </head>
 <body>
   <h1>Échecs en ligne</h1>
-  <div id="chessboard"></div>
-  <div id="status">Cliquez sur une pièce puis sur une case</div>
-
+  <div id="status">Chargement du jeu...</div>
+  <div id="board"></div>
   <script>
-    const board = document.getElementById('chessboard');
+    const api = { board: '/board', move: '/move' };
+    let boardState = [], turn = null, selected = null;
 
-    // Position initiale
-    let position = [
-      ["♜","♞","♝","♛","♚","♝","♞","♜"],
-      ["♟","♟","♟","♟","♟","♟","♟","♟"],
-      ["","","","","","","",""],
-      ["","","","","","","",""],
-      ["","","","","","","",""],
-      ["","","","","","","",""],
-      ["♙","♙","♙","♙","♙","♙","♙","♙"],
-      ["♖","♘","♗","♕","♔","♗","♘","♖"]
-    ];
+    const statusDiv = document.getElementById('status');
+    const boardDiv = document.getElementById('board');
 
-    let selected = null;
+    const pieceSym = {
+      'wP':'♙','wR':'♖','wN':'♘','wB':'♗','wQ':'♕','wK':'♔',
+      'bP':'♟','bR':'♜','bN':'♞','bB':'♝','bQ':'♛','bK':'♚','':''
+    };
 
-    function drawBoard() {
-      board.innerHTML = '';
-      for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 8; col++) {
-          const square = document.createElement('div');
-          square.className = 'square ' + ((row + col) % 2 === 0 ? 'white' : 'black');
-          square.dataset.row = row;
-          square.dataset.col = col;
-          square.textContent = position[row][col];
-          square.addEventListener('click', handleClick);
-          board.appendChild(square);
+    function render() {
+      boardDiv.innerHTML = '';
+      boardState.forEach((row,i)=>{
+        row.forEach((p,j)=>{
+          const sq = document.createElement('div');
+          sq.className = 'sq ' + ((i+j)%2?'black':'white');
+          sq.dataset.i=i; sq.dataset.j=j;
+          sq.textContent = pieceSym[p];
+          if (selected && selected.i==i && selected.j==j)
+            sq.classList.add('selected');
+          sq.onclick = () => clickCell(i,j);
+          boardDiv.appendChild(sq);
+        });
+      });
+      if (turn) statusDiv.textContent = turn=='w'?'Tour Blancs':'Tour Noirs';
+      else statusDiv.textContent = status || 'Partie terminée';
+    }
+
+    async function fetchBoard(){
+      const r=await fetch(api.board);
+      const d=await r.json();
+      boardState=d.board; turn=d.turn; render();
+    }
+
+    async function clickCell(i,j){
+      if (!turn) return;
+      if (selected){
+        const res = await fetch(api.move, {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            from_row:selected.i, from_col:selected.j,
+            to_row:i, to_col:j
+          })
+        });
+        const d = await res.json();
+        if (res.ok){
+          boardState=d.board; turn=d.turn;
+          statusDiv.textContent = d.status || '';
+        } else {
+          statusDiv.textContent = d.error;
+        }
+        selected=null; render();
+      } else {
+        if (boardState[i][j] && boardState[i][j][0]==turn){
+          selected={i,j}; render();
         }
       }
     }
 
-    function handleClick(e) {
-      const row = parseInt(e.target.dataset.row);
-      const col = parseInt(e.target.dataset.col);
-
-      if (selected) {
-        const [fromRow, fromCol] = selected;
-        const piece = position[fromRow][fromCol];
-        const destination = position[row][col];
-
-        // Move the piece
-        position[row][col] = piece;
-        position[fromRow][fromCol] = "";
-        selected = null;
-        drawBoard();
-        updateStatus(`Déplacement effectué : ${piece} vers (${row+1}, ${col+1})`);
-      } else if (position[row][col] !== "") {
-        selected = [row, col];
-        e.target.classList.add("selected");
-        updateStatus(`Pièce sélectionnée : ${position[row][col]}`);
-      }
-    }
-
-    function updateStatus(msg) {
-      document.getElementById('status').textContent = msg;
-    }
-
-    drawBoard();
+    fetchBoard();
   </script>
 </body>
 </html>
