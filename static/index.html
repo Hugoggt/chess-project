@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Double un nombre</title>
+</head>
+<body>
+  <h1>Entre un nombre</h1>
+  <input type="number" id="inputNumber">
+  <button onclick="sendNumber()">Envoyer</button>
+  <p id="result"></p>
+
+  <script>
+    async function sendNumber() {
+      const number = document.getElementById("inputNumber").value;
+      const response = await fetch("/double", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ number: parseInt(number) })
+      });
+
+      const data = await response.json();
+      document.getElementById("result").innerText = "Résultat : " + data.result;
+    }
+  </script>
+</body>
+</html>
