@@ -26,25 +26,35 @@ def get_board():
 @app.post("/move")
 def play_move(move_req: dict):
     try:
-        # suppose on fait un truc qui peut échouer
         move = move_req.get("uci")
         if move is None:
             raise ValueError("Missing move")
-        # ici, ta logique pour jouer le coup
-        return {"status": "move played", "move": move}
+
+        # Jouer le coup du joueur
+        board.push_san(move)  # ou board.push(chess.Move.from_uci(move)) selon ton usage
+
+        # Vérifier si la partie est finie après le coup du joueur
+        if board.is_game_over():
+            return {
+                "fen": board.fen(),
+                "is_game_over": True,
+                "result": board.result()
+            }
+
+        # Coup de l'IA (joue noir)
+        ai_move = choose_ai_move(board)
+        board.push(ai_move)
+
+        # Retourner le résultat après le coup de l'IA
+        return {
+            "fen": board.fen(),
+            "ai_move": ai_move.uci(),
+            "is_game_over": board.is_game_over(),
+            "result": board.result() if board.is_game_over() else None
+        }
+
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=400)
-    
-    # Si partie finie après le coup du joueur
-    if board.is_game_over():
-        return {"fen": board.fen(), "is_game_over": True, "result": board.result()}
-    
-    # Coup de l'IA (joue noir)
-    ai_move = choose_ai_move(board)
-    board.push(ai_move)
-    
-    # Résultat après le coup IA
-    return {"fen": board.fen(), "ai_move": ai_move.uci(), "is_game_over": board.is_game_over(), "result": board.result() if board.is_game_over() else None}
 
 def choose_ai_move(board):
     # Ici choix simple : coup aléatoire parmi les coups légaux pour noir
