@@ -2,27 +2,33 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<title>Échiquier avec pièces et règles simples</title>
+<title>Échiquier fonctionnel</title>
 <style>
   body {
-    margin: 0;
-    height: 100vh;
+    margin: 0; padding: 0; 
+    background-color: #0b1e4d; /* bleu nuit */
     display: flex;
     justify-content: center;
     align-items: center;
-    background-color: #eee;
+    height: 100vh;
+    color: white;
+    font-family: Arial, sans-serif;
   }
-  table {
-    border-collapse: collapse;
+  #board {
+    display: grid;
+    grid-template-columns: repeat(8, 60px);
+    grid-template-rows: repeat(8, 60px);
+    border: 3px solid white;
+    box-shadow: 0 0 10px #0066ff;
   }
-  td {
+  .square {
     width: 60px;
     height: 60px;
+    line-height: 60px;
+    font-size: 40px;
     text-align: center;
-    vertical-align: middle;
-    font-size: 36px;
-    cursor: pointer;
     user-select: none;
+    cursor: pointer;
   }
   .white {
     background-color: #f0d9b5;
@@ -30,203 +36,142 @@
   .black {
     background-color: #b58863;
   }
-  .selected {
-    outline: 3px solid red;
-  }
   .highlight {
-    outline: 3px solid green;
+    outline: 3px solid yellow;
+  }
+  #status {
+    margin-top: 20px;
+    text-align: center;
+    font-weight: bold;
   }
 </style>
 </head>
 <body>
 
-<table id="chessboard"></table>
+<div>
+  <div id="board"></div>
+  <div id="status">Chargement...</div>
+</div>
 
 <script>
-  // Unicode des pièces
-  const piecesUnicode = {
-    'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'p': '♟',  // noirs
-    'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', 'P': '♙'   // blancs
+  const unicodePieces = {
+    'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔',
+    'p': '♟', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚'
   };
 
-  // Plateau en notation FEN simplifiée (8 lignes, chaque lettre = pièce, chiffres = cases vides)
-  // Pour simplifier, on écrit tout en lettres (pas de chiffres), '.' = case vide
-  let boardState = [
-    "rnbqkbnr",
-    "pppppppp",
-    "........",
-    "........",
-    "........",
-    "........",
-    "PPPPPPPP",
-    "RNBQKBNR"
-  ];
+  const boardEl = document.getElementById('board');
+  const statusEl = document.getElementById('status');
 
-  const board = document.getElementById('chessboard');
-  let selectedCell = null;
-  let selectedPos = null;
+  let boardState = null;
+  let selectedSquare = null;
+  let legalMovesFromSelected = [];
 
-  // Crée le tableau HTML avec les cases et pièces
-  function drawBoard() {
-    board.innerHTML = '';
-    for(let row=8; row>=1; row--) {
-      const tr = document.createElement('tr');
-      for(let col=1; col<=8; col++) {
-        const td = document.createElement('td');
-        const isWhite = (row + col) % 2 === 0;
-        td.className = isWhite ? 'white' : 'black';
-
-        // Position en notation a1, b1 ...
-        const pos = String.fromCharCode(96 + col) + row;
-        td.dataset.position = pos;
-
-        // Récupère la pièce à cette position dans boardState
-        // boardState[0] = rang 8, donc ligne = 8 - row (car row descend de 8 à 1)
-        const pieceChar = boardState[8 - row][col - 1];
-        if(pieceChar !== '.') {
-          td.textContent = piecesUnicode[pieceChar];
-          td.dataset.piece = pieceChar;
-        } else {
-          td.dataset.piece = '';
-        }
-
-        td.addEventListener('click', () => cellClicked(td));
-
-        tr.appendChild(td);
+  // Générer l'échiquier vide avec les cases colorées
+  function createBoard() {
+    boardEl.innerHTML = '';
+    for(let rank = 7; rank >= 0; rank--) {
+      for(let file = 0; file < 8; file++) {
+        const square = document.createElement('div');
+        square.id = `${String.fromCharCode(97 + file)}${rank + 1}`;
+        square.className = 'square ' + ((file + rank) % 2 === 0 ? 'white' : 'black');
+        square.addEventListener('click', () => onSquareClick(square.id));
+        boardEl.appendChild(square);
       }
-      board.appendChild(tr);
     }
   }
 
-  // Vérifie si un pion peut se déplacer de selectedPos à destPos
-  // Exemple simple : pions blancs avancent vers le haut (ligne ++), noirs vers le bas (ligne --)
-  function validPawnMove(piece, from, to) {
-    const fromCol = from.charCodeAt(0);
-    const fromRow = parseInt(from[1]);
-    const toCol = to.charCodeAt(0);
-    const toRow = parseInt(to[1]);
-    const dir = piece === 'P' ? 1 : -1; // blanc monte (row+1), noir descend (row-1)
-    
-    // Avancer d'une case si vide
-    if(toCol === fromCol && toRow === fromRow + dir) {
-      if(getPieceAt(to) === '') return true;
+  // Mettre à jour l'échiquier en affichant les pièces selon le FEN
+  function updateBoard(fen) {
+    const parts = fen.split(' ');
+    const rows = parts[0].split('/');
+    for(let rank = 7; rank >= 0; rank--) {
+      let file = 0;
+      for(const char of rows[7-rank]) {
+        const squareId = `${String.fromCharCode(97 + file)}${rank + 1}`;
+        const squareEl = document.getElementById(squareId);
+        if(/[1-8]/.test(char)) {
+          for(let i = 0; i < parseInt(char); i++) {
+            const sq = document.getElementById(`${String.fromCharCode(97 + file)}${rank + 1}`);
+            sq.textContent = '';
+            file++;
+          }
+        } else {
+          squareEl.textContent = unicodePieces[char] || '';
+          file++;
+        }
+      }
     }
-    // Premier déplacement : avancer de deux cases si vides
-    if(toCol === fromCol && ((piece === 'P' && fromRow === 2) || (piece === 'p' && fromRow === 7)) && toRow === fromRow + 2*dir) {
-      // Vérifie case intermédiaire vide
-      const intermediatePos = String.fromCharCode(fromCol) + (fromRow + dir);
-      if(getPieceAt(to) === '' && getPieceAt(intermediatePos) === '') return true;
-    }
-    // Capture diagonale
-    if(Math.abs(toCol - fromCol) === 1 && toRow === fromRow + dir) {
-      const targetPiece = getPieceAt(to);
-      if(targetPiece !== '' && isOppositeColor(piece, targetPiece)) return true;
-    }
-    return false;
-  }
-
-  // Fonction simple qui vérifie la couleur (majuscule = blanc, minuscule = noir)
-  function isOppositeColor(p1, p2) {
-    if(!p1 || !p2) return false;
-    return (p1 === p1.toUpperCase()) !== (p2 === p2.toUpperCase());
-  }
-
-  // Récupère la pièce à une position dans boardState
-  function getPieceAt(pos) {
-    const col = pos.charCodeAt(0) - 96; // a=1
-    const row = parseInt(pos[1]);
-    return boardState[8 - row][col - 1];
-  }
-
-  // Modifie la pièce à une position dans boardState
-  function setPieceAt(pos, pieceChar) {
-    const col = pos.charCodeAt(0) - 96;
-    const row = parseInt(pos[1]);
-    const rowIdx = 8 - row;
-    const line = boardState[rowIdx];
-    boardState[rowIdx] = line.substring(0, col - 1) + pieceChar + line.substring(col);
   }
 
   // Gestion du clic sur une case
-  function cellClicked(cell) {
-    const pos = cell.dataset.position;
-    const piece = getPieceAt(pos);
+  async function onSquareClick(squareId) {
+    if (!boardState || boardState.is_game_over) return;
 
-    // Si pas de pièce sélectionnée ET la case a une pièce
-    if(!selectedCell && piece !== '.') {
-      selectedCell = cell;
-      selectedPos = pos;
-      cell.classList.add('selected');
-      highlightMoves(pos);
-    }
-    // Si une case est déjà sélectionnée et que tu recliques dessus => désélection
-    else if(selectedCell === cell) {
-      clearHighlights();
-      selectedCell = null;
-      selectedPos = null;
-    }
-    // Sinon, essayer de déplacer pièce sélectionnée vers la case cliquée
-    else if(selectedCell) {
-      // Vérifier si le déplacement est valide pour un pion (exemple)
-      const selectedPiece = getPieceAt(selectedPos);
-      if(selectedPiece.toUpperCase() === 'P' && validPawnMove(selectedPiece, selectedPos, pos)) {
-        // Déplacer la pièce
-        setPieceAt(pos, selectedPiece);
-        setPieceAt(selectedPos, '.');
-        clearHighlights();
-        selectedCell = null;
-        selectedPos = null;
-        drawBoard();
+    if (!selectedSquare) {
+      // Sélectionner une pièce si elle appartient au joueur (blancs)
+      const piece = document.getElementById(squareId).textContent;
+      if (piece && piece === piece.toUpperCase()) {
+        selectedSquare = squareId;
+        highlightLegalMoves(squareId);
+      }
+    } else {
+      // Essayer de jouer le coup selectedSquare -> squareId
+      const move = selectedSquare + squareId;
+      if (legalMovesFromSelected.includes(move)) {
+        const response = await fetch('/play_move', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({move_uci: move})
+        });
+        const data = await response.json();
+        if (response.ok) {
+          boardState = data;
+          updateBoard(data.fen);
+          statusEl.textContent = boardState.is_game_over ? `Partie terminée: ${boardState.result}` : `Coup joué: ${move}` + (data.ai_move ? ` | Coup IA: ${data.ai_move}` : '');
+          selectedSquare = null;
+          clearHighlights();
+        } else {
+          alert(data.error);
+          selectedSquare = null;
+          clearHighlights();
+        }
       } else {
-        // Sinon désélectionne tout
+        // Annuler la sélection
+        selectedSquare = null;
         clearHighlights();
-        selectedCell = null;
-        selectedPos = null;
       }
     }
   }
 
-  // Montre en vert les cases où la pièce sélectionnée peut aller (uniquement pour pion ici)
-  function highlightMoves(pos) {
+  // Affiche les coups légaux possibles depuis une case sélectionnée
+  function highlightLegalMoves(squareId) {
     clearHighlights();
-    const piece = getPieceAt(pos);
-    if(piece.toUpperCase() === 'P') {
-      const possibleMoves = [];
-      const fromCol = pos.charCodeAt(0);
-      const fromRow = parseInt(pos[1]);
-      const dir = piece === 'P' ? 1 : -1;
-
-      // Avancer 1 case
-      const oneStep = String.fromCharCode(fromCol) + (fromRow + dir);
-      if(validPawnMove(piece, pos, oneStep)) possibleMoves.push(oneStep);
-
-      // Avancer 2 cases (premier coup)
-      const twoStep = String.fromCharCode(fromCol) + (fromRow + 2 * dir);
-      if(validPawnMove(piece, pos, twoStep)) possibleMoves.push(twoStep);
-
-      // Capture diagonale gauche
-      const diagLeft = String.fromCharCode(fromCol - 1) + (fromRow + dir);
-      if(validPawnMove(piece, pos, diagLeft)) possibleMoves.push(diagLeft);
-
-      // Capture diagonale droite
-      const diagRight = String.fromCharCode(fromCol + 1) + (fromRow + dir);
-      if(validPawnMove(piece, pos, diagRight)) possibleMoves.push(diagRight);
-
-      // Colorie les cases valides
-      possibleMoves.forEach(move => {
-        const cell = document.querySelector(`td[data-position='${move}']`);
-        if(cell) cell.classList.add('highlight');
-      });
-    }
+    legalMovesFromSelected = boardState.legal_moves.filter(mv => mv.startsWith(squareId));
+    document.getElementById(squareId).classList.add('highlight');
+    legalMovesFromSelected.forEach(mv => {
+      const toSquare = mv.slice(2,4);
+      document.getElementById(toSquare).classList.add('highlight');
+    });
   }
 
+  // Enlever les surbrillances
   function clearHighlights() {
-    document.querySelectorAll('td.selected').forEach(c => c.classList.remove('selected'));
-    document.querySelectorAll('td.highlight').forEach(c => c.classList.remove('highlight'));
+    document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
+    legalMovesFromSelected = [];
   }
 
-  drawBoard();
+  // Initialisation
+  async function init() {
+    createBoard();
+    const response = await fetch('/board_state');
+    boardState = await response.json();
+    updateBoard(boardState.fen);
+    statusEl.textContent = "À vous de jouer (blancs)";
+  }
+
+  init();
 </script>
 
 </body>
 </html>
+
