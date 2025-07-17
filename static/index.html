@@ -1,166 +1,143 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <title>Échiquier interactif</title>
+  <meta charset="UTF-8">
+  <title>Jeu d'Échecs</title>
   <style>
     body {
-      background-color: #0b1a2b;
+      background-color: #121826;
       display: flex;
       flex-direction: column;
       align-items: center;
-      color: white;
-      font-family: Arial, sans-serif;
+      color: #f0e6d2;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
     }
+
+    h1 {
+      margin-top: 30px;
+      font-size: 2.5em;
+      color: #ffd700;
+      text-shadow: 1px 1px 5px #000;
+    }
+
     #chessboard {
       display: grid;
-      grid-template-columns: repeat(8, 60px);
-      grid-template-rows: repeat(8, 60px);
-      margin-top: 50px;
-      border: 4px solid white;
+      grid-template-columns: repeat(8, 70px);
+      grid-template-rows: repeat(8, 70px);
+      margin-top: 40px;
+      border: 4px solid #f0e6d2;
+      box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
     }
+
     .square {
-      width: 60px;
-      height: 60px;
+      width: 70px;
+      height: 70px;
       display: flex;
       justify-content: center;
       align-items: center;
-      font-size: 36px;
+      font-size: 42px;
       cursor: pointer;
-      user-select: none;
+      transition: background-color 0.2s, transform 0.2s;
     }
+
     .white {
-      background-color: #eee;
-      color: black;
+      background-color: #f4e8c1;
+      color: #222;
     }
+
     .black {
-      background-color: #444;
+      background-color: #1e2a38;
+      color: #f0e6d2;
     }
+
+    .square:hover {
+      transform: scale(1.03);
+    }
+
     .selected {
-      outline: 3px solid yellow;
+      outline: 3px solid #ffd700;
+      box-shadow: 0 0 10px #ffd700;
     }
+
     #status {
-      margin-top: 20px;
-      min-height: 20px;
+      margin-top: 25px;
+      font-size: 1.2em;
+      padding: 10px 20px;
+      background-color: #1f2c3b;
+      border-radius: 8px;
+      border: 1px solid #ffd70088;
+      box-shadow: 0 0 10px rgba(255, 215, 0, 0.1);
     }
   </style>
 </head>
 <body>
-  <h1>Échiquier</h1>
+  <h1>Échecs en ligne</h1>
   <div id="chessboard"></div>
-  <div id="status">Chargement...</div>
+  <div id="status">Cliquez sur une pièce puis sur une case</div>
 
   <script>
-    const boardDiv = document.getElementById('chessboard');
-    const statusDiv = document.getElementById('status');
+    const board = document.getElementById('chessboard');
 
-    let board = [];
-    let turn = 'w';
-    let selected = null; // {row, col}
+    // Position initiale
+    let position = [
+      ["♜","♞","♝","♛","♚","♝","♞","♜"],
+      ["♟","♟","♟","♟","♟","♟","♟","♟"],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["♙","♙","♙","♙","♙","♙","♙","♙"],
+      ["♖","♘","♗","♕","♔","♗","♘","♖"]
+    ];
 
-    // Mapping des pièces backend -> symboles Unicode
-    const pieceMap = {
-      'wP': '♙', 'wR': '♖', 'wN': '♘', 'wB': '♗', 'wQ': '♕', 'wK': '♔',
-      'bP': '♟', 'bR': '♜', 'bN': '♞', 'bB': '♝', 'bQ': '♛', 'bK': '♚',
-      '': ''
-    };
+    let selected = null;
 
     function drawBoard() {
-      boardDiv.innerHTML = '';
-      for(let r=0; r<8; r++) {
-        for(let c=0; c<8; c++) {
+      board.innerHTML = '';
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
           const square = document.createElement('div');
-          square.className = 'square ' + ((r+c)%2 === 0 ? 'white' : 'black');
-          square.dataset.row = r;
-          square.dataset.col = c;
-          square.textContent = pieceMap[board[r][c] || ''] || '';
-          if(selected && selected.row === r && selected.col === c) {
-            square.classList.add('selected');
-          }
-          square.addEventListener('click', onSquareClick);
-          boardDiv.appendChild(square);
+          square.className = 'square ' + ((row + col) % 2 === 0 ? 'white' : 'black');
+          square.dataset.row = row;
+          square.dataset.col = col;
+          square.textContent = position[row][col];
+          square.addEventListener('click', handleClick);
+          board.appendChild(square);
         }
       }
-      statusDiv.textContent = (turn === 'w' ? "Tour des Blancs" : "Tour des Noirs");
     }
 
-    async function fetchBoard() {
-      try {
-        const res = await fetch('/board');
-        if(!res.ok) throw new Error("Erreur de chargement du plateau");
-        const data = await res.json();
-        board = data.board;
-        turn = data.turn;
+    function handleClick(e) {
+      const row = parseInt(e.target.dataset.row);
+      const col = parseInt(e.target.dataset.col);
+
+      if (selected) {
+        const [fromRow, fromCol] = selected;
+        const piece = position[fromRow][fromCol];
+        const destination = position[row][col];
+
+        // Move the piece
+        position[row][col] = piece;
+        position[fromRow][fromCol] = "";
         selected = null;
         drawBoard();
-        statusDiv.textContent = (turn === 'w' ? "Tour des Blancs" : "Tour des Noirs");
-      } catch(e) {
-        statusDiv.textContent = "Erreur: " + e.message;
+        updateStatus(`Déplacement effectué : ${piece} vers (${row+1}, ${col+1})`);
+      } else if (position[row][col] !== "") {
+        selected = [row, col];
+        e.target.classList.add("selected");
+        updateStatus(`Pièce sélectionnée : ${position[row][col]}`);
       }
     }
 
-    async function playMove(fromRow, fromCol, toRow, toCol) {
-      try {
-        const res = await fetch('/move', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({
-            from_row: fromRow,
-            from_col: fromCol,
-            to_row: toRow,
-            to_col: toCol
-          })
-        });
-        if(res.ok) {
-          const data = await res.json();
-          board = data.board;
-          turn = data.turn;
-          selected = null;
-          drawBoard();
-        } else {
-          const err = await res.json();
-          statusDiv.textContent = "Erreur: " + err.error;
-          selected = null;
-          drawBoard();
-        }
-      } catch(e) {
-        statusDiv.textContent = "Erreur réseau";
-      }
+    function updateStatus(msg) {
+      document.getElementById('status').textContent = msg;
     }
 
-    function onSquareClick(e) {
-      const r = parseInt(e.currentTarget.dataset.row);
-      const c = parseInt(e.currentTarget.dataset.col);
-      const piece = board[r][c];
-
-      if(selected) {
-        // Tenter de jouer un coup
-        if(r === selected.row && c === selected.col) {
-          // Désélectionner la case
-          selected = null;
-          drawBoard();
-          statusDiv.textContent = (turn === 'w' ? "Tour des Blancs" : "Tour des Noirs");
-          return;
-        }
-        playMove(selected.row, selected.col, r, c);
-      } else {
-        // Sélectionner une pièce si c'est bien le tour
-        if(piece && piece[0] === turn) {
-          selected = {row: r, col: c};
-          drawBoard();
-          statusDiv.textContent = "Pièce sélectionnée en " + (r+1) + ", " + (c+1);
-        }
-      }
-    }
-
-    // Initialisation
-    fetchBoard();
-
+    drawBoard();
   </script>
 </body>
 </html>
 
-  </script>
-</body>
-</html>
 
