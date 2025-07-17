@@ -98,9 +98,10 @@ def is_valid_move(piece, fr, fc, tr, tc):
     return False
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", port=8000, reload=True)
-
+    try:
+        uvicorn.run("main:app", port=8000, reload=True)
     except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=400)
+        print(f"Erreur lors du lancement du serveur : {e}")
+
 
 
