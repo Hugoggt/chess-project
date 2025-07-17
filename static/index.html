@@ -1,104 +1,80 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>Échiquier interactif</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" />
+  <meta charset="UTF-8">
+  <title>Échiquier</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
   <style>
     body {
-      background-color: #001f3f; /* bleu nuit */
+      background-color: #0b1a2b; /* bleu nuit */
       display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
       flex-direction: column;
+      align-items: center;
       color: white;
       font-family: Arial, sans-serif;
     }
     #board {
-      width: 480px;
+      width: 400px;
+      margin-top: 50px;
     }
     #status {
-      margin-top: 10px;
-      font-size: 18px;
+      margin-top: 20px;
     }
   </style>
 </head>
 <body>
+  <h1>Échiquier</h1>
   <div id="board"></div>
   <div id="status">Votre tour (blancs)</div>
 
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
   <script>
+    const boardDiv = document.getElementById('board');
+    const statusDiv = document.getElementById('status');
     let board = null;
     let game = new Chess();
 
-    const statusEl = document.getElementById('status');
-
-    // Initialiser l'échiquier
-    function initBoard(fen) {
-      if (board) board.destroy();
-
-      board = Chessboard('board', {
-        position: fen,
-        draggable: true,
-        orientation: 'white',
-        onDrop: handleMove,
-      });
-    }
-
-    // Charger l'état initial depuis backend
-    async function loadBoard() {
-      const resp = await fetch('/board');
-      const data = await resp.json();
-      game.load(data.fen);
-      initBoard(data.fen);
-      updateStatus(data);
-    }
-
-    function updateStatus(data) {
-      if (data.is_game_over) {
-        if (data.result === "1-0") statusEl.textContent = "Échec et mat ! Vous avez gagné.";
-        else if (data.result === "0-1") statusEl.textContent = "Échec et mat ! L'IA a gagné.";
-        else statusEl.textContent = "Partie terminée (nul).";
+    function updateStatus(response) {
+      if (response.is_game_over) {
+        statusDiv.innerText = "Partie terminée - Résultat : " + response.result;
       } else {
-        statusEl.textContent = "Votre tour (blancs)";
+        statusDiv.innerText = "Votre tour (blancs)";
       }
+      board.position(response.fen);
     }
 
-    // Quand le joueur déplace une pièce
-    async function handleMove(source, target, piece, newPos, oldPos, orientation) {
+    function makeMove(source, target) {
       const move = source + target;
-      const resp = await fetch('/move', {
+      fetch('/move', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ uci: move })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) {
+          alert("Coup invalide : " + data.error);
+          return;
+        }
+        updateStatus(data);
       });
-
-      if (!resp.ok) {
-        alert("Coup illégal ou erreur serveur");
-        board.position(game.fen()); // reset la position
-        return 'snapback';
-      }
-
-      const data = await resp.json();
-      game.load(data.fen);
-      board.position(data.fen);
-
-      updateStatus(data);
-
-      if (data.is_game_over) {
-        alert("Partie terminée : " + data.result);
-      }
-
-      return;
     }
 
-    loadBoard();
+    fetch('/board')
+      .then(res => res.json())
+      .then(data => {
+        game.load(data.fen);
+        board = Chessboard('board', {
+          draggable: true,
+          position: data.fen,
+          onDrop: function (source, target) {
+            makeMove(source, target);
+          }
+        });
+        updateStatus(data);
+      });
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/chess.js@1.0.0/chess.min.js"></script>
 </body>
 </html>
 
