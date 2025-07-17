@@ -1,22 +1,48 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Échiquier</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.css" />
+  <title>Échiquier minimal</title>
   <style>
     body {
-      background-color: #0b1a2b; /* bleu nuit */
+      background-color: #0b1a2b;
       display: flex;
       flex-direction: column;
       align-items: center;
       color: white;
       font-family: Arial, sans-serif;
     }
-    #board {
-      width: 400px;
+
+    #chessboard {
+      display: grid;
+      grid-template-columns: repeat(8, 60px);
+      grid-template-rows: repeat(8, 60px);
       margin-top: 50px;
+      border: 4px solid white;
     }
+
+    .square {
+      width: 60px;
+      height: 60px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 36px;
+      cursor: pointer;
+    }
+
+    .white {
+      background-color: #eee;
+    }
+
+    .black {
+      background-color: #444;
+    }
+
+    .selected {
+      outline: 3px solid yellow;
+    }
+
     #status {
       margin-top: 20px;
     }
@@ -24,56 +50,59 @@
 </head>
 <body>
   <h1>Échiquier</h1>
-  <div id="board"></div>
-  <div id="status">Votre tour (blancs)</div>
+  <div id="chessboard"></div>
+  <div id="status">Cliquez sur une pièce puis sur une case</div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard-js/1.0.0/chessboard-1.0.0.min.js"></script>
   <script>
-    const boardDiv = document.getElementById('board');
-    const statusDiv = document.getElementById('status');
-    let board = null;
-    let game = new Chess();
+    const board = document.getElementById('chessboard');
 
-    function updateStatus(response) {
-      if (response.is_game_over) {
-        statusDiv.innerText = "Partie terminée - Résultat : " + response.result;
-      } else {
-        statusDiv.innerText = "Votre tour (blancs)";
-      }
-      board.position(response.fen);
-    }
+    // Placement initial : tableau 2D
+    let position = [
+      ["♜","♞","♝","♛","♚","♝","♞","♜"],
+      ["♟","♟","♟","♟","♟","♟","♟","♟"],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["","","","","","","",""],
+      ["♙","♙","♙","♙","♙","♙","♙","♙"],
+      ["♖","♘","♗","♕","♔","♗","♘","♖"]
+    ];
 
-    function makeMove(source, target) {
-      const move = source + target;
-      fetch('/move', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ uci: move })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.error) {
-          alert("Coup invalide : " + data.error);
-          return;
+    let selected = null;
+
+    function drawBoard() {
+      board.innerHTML = '';
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const square = document.createElement('div');
+          square.className = 'square ' + ((row + col) % 2 === 0 ? 'white' : 'black');
+          square.dataset.row = row;
+          square.dataset.col = col;
+          square.textContent = position[row][col];
+          square.addEventListener('click', handleClick);
+          board.appendChild(square);
         }
-        updateStatus(data);
-      });
+      }
     }
 
-    fetch('/board')
-      .then(res => res.json())
-      .then(data => {
-        game.load(data.fen);
-        board = Chessboard('board', {
-          draggable: true,
-          position: data.fen,
-          onDrop: function (source, target) {
-            makeMove(source, target);
-          }
-        });
-        updateStatus(data);
-      });
+    function handleClick(e) {
+      const row = parseInt(e.target.dataset.row);
+      const col = parseInt(e.target.dataset.col);
+
+      if (selected) {
+        const [fromRow, fromCol] = selected;
+        // Move the piece
+        position[row][col] = position[fromRow][fromCol];
+        position[fromRow][fromCol] = "";
+        selected = null;
+        drawBoard();
+      } else if (position[row][col] !== "") {
+        selected = [row, col];
+        e.target.classList.add("selected");
+      }
+    }
+
+    drawBoard();
   </script>
 </body>
 </html>
