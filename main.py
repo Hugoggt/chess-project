@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -7,14 +7,12 @@ import random
 
 app = FastAPI()
 
-# Crée une instance du plateau
 board = chess.Board()
 
-# Sert les fichiers statiques (HTML, JS, CSS)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 class MoveRequest(BaseModel):
-    uci: str  # exemple : "e2e4"
+    uci: str
 
 @app.get("/", response_class=HTMLResponse)
 def get_index():
@@ -37,7 +35,6 @@ def play_move(move_req: MoveRequest):
             raise ValueError("Coup illégal")
         board.push(move)
 
-        # Vérifie si le jeu est fini après le coup du joueur
         if board.is_game_over():
             return {
                 "fen": board.fen(),
@@ -46,23 +43,17 @@ def play_move(move_req: MoveRequest):
                 "result": board.result()
             }
 
-        # Coup IA
-        ai_move = choose_ai_move(board)
-        if ai_move is not None:
-            board.push(ai_move)
+        ai_move = random.choice(list(board.legal_moves))
+        board.push(ai_move)
 
         return {
             "fen": board.fen(),
-            "ai_move": ai_move.uci() if ai_move else None,
+            "ai_move": ai_move.uci(),
             "is_game_over": board.is_game_over(),
             "result": board.result() if board.is_game_over() else None
         }
 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=400)
-
-def choose_ai_move(board):
-    moves = list(board.legal_moves)
-    return random.choice(moves) if moves else None
 
 
