@@ -25,44 +25,22 @@ def get_board():
 
 @app.post("/move")
 def play_move(move_req: dict):
-    move_uci = move_req.get("uci")
-    if not move_uci:
-        return JSONResponse(content={"error": "Missing 'uci' move"}, status_code=400)
-
-    if not board.is_legal(chess.Move.from_uci(move_uci)):
-        return JSONResponse(content={"error": "Illegal move"}, status_code=400)
-
-    move = chess.Move.from_uci(move_uci)
-    if move not in board.legal_moves:
-        return JSONResponse(content={"error": "Invalid move"}, status_code=400)
-
-    # Coup du joueur (blancs)
-    board.push(move)
-
-    if board.is_game_over():
-        return {
-            "fen": board.fen(),
-            "is_game_over": True,
-            "result": board.result()
-        }
-
-    # Coup IA (noirs)
-    ai_move = choose_ai_move(board)
-    board.push(ai_move)
-
-    return {
-        "fen": board.fen(),
-        "ai_move": ai_move.uci(),
-        "is_game_over": board.is_game_over(),
-        "result": board.result() if board.is_game_over() else None
-    }
+    try:
+        # suppose on fait un truc qui peut échouer
+        move = move_req.get("uci")
+        if move is None:
+            raise ValueError("Missing move")
+        # ici, ta logique pour jouer le coup
+        return {"status": "move played", "move": move}
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=400)
 
 def choose_ai_move(board):
-    # Ici choix simple : coup aléatoire parmi les coups légaux pour noir
-    import random
-    moves = list(board.legal_moves)
-    return random.choice(moves)
-
+    try:
+        moves = list(board.legal_moves)
+        if not moves:
+            return None
+        return random.choice(moves)
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
