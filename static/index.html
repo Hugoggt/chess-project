@@ -1,55 +1,75 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8" />
-    <title>Échiquier fonctionnel</title>
-    <link rel="stylesheet" href="https://unpkg.com/chessboardjs@1.0.0/css/chessboard-1.0.0.min.css" />
-    <style>
-        body {
-            margin: 0;
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: #f5f5f5;
-        }
-        #board {
-            width: 480px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
-        }
-    </style>
+<meta charset="UTF-8" />
+<title>Échiquier simple</title>
+<style>
+  body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #eee;
+  }
+  table {
+    border-collapse: collapse;
+  }
+  td {
+    width: 60px;
+    height: 60px;
+    text-align: center;
+    vertical-align: middle;
+    font-size: 36px;
+    cursor: pointer;
+  }
+  .white {
+    background-color: #f0d9b5;
+  }
+  .black {
+    background-color: #b58863;
+  }
+  .selected {
+    outline: 3px solid red;
+  }
+</style>
 </head>
 <body>
 
-<div id="board"></div>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-<script src="https://unpkg.com/chessboardjs@1.0.0/js/chessboard-1.0.0.min.js"></script>
+<table id="chessboard"></table>
 
 <script>
-    // Initialisation de la partie d'échecs
-    const game = new Chess();
+  const board = document.getElementById('chessboard');
 
-    // Initialisation de l'échiquier
-    const board = Chessboard('board', {
-        position: 'start',
-        draggable: true,
-        onDrop: function(source, target) {
-            // Tente de jouer le coup avec Chess.js
-            const move = game.move({
-                from: source,
-                to: target,
-                promotion: 'q' // promotion par défaut en reine
-            });
-
-            // Si coup invalide, annule la pièce (retourne à sa position initiale)
-            if (move === null) return 'snapback';
-        },
-        onSnapEnd: function() {
-            board.position(game.fen());
+  // Crée 8x8 cases avec alternance noir/blanc
+  for(let row=8; row>=1; row--) {
+    const tr = document.createElement('tr');
+    for(let col=1; col<=8; col++) {
+      const td = document.createElement('td');
+      // Cases blanches si la somme des indices est paire, sinon noires
+      const isWhite = (row + col) % 2 === 0;
+      td.className = isWhite ? 'white' : 'black';
+      td.dataset.position = String.fromCharCode(96+col) + row; // a8, b8 ...
+      td.addEventListener('click', () => {
+        // Toggle sélection (juste un effet visuel)
+        if(td.classList.contains('selected')) {
+          td.classList.remove('selected');
+        } else {
+          // Désélectionne les autres cases
+          document.querySelectorAll('td.selected').forEach(c => c.classList.remove('selected'));
+          td.classList.add('selected');
+          console.log('Case sélectionnée:', td.dataset.position);
         }
-    });
+      });
+      tr.appendChild(td);
+    }
+    board.appendChild(tr);
+  }
 </script>
+
+</body>
+</html>
+
 
 </body>
 </html>
