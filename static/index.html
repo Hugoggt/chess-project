@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8" />
-<title>Échiquier simple</title>
+<title>Échiquier avec pièces et règles simples</title>
 <style>
   body {
     margin: 0;
@@ -22,6 +22,7 @@
     vertical-align: middle;
     font-size: 36px;
     cursor: pointer;
+    user-select: none;
   }
   .white {
     background-color: #f0d9b5;
@@ -32,6 +33,9 @@
   .selected {
     outline: 3px solid red;
   }
+  .highlight {
+    outline: 3px solid green;
+  }
 </style>
 </head>
 <body>
@@ -39,38 +43,190 @@
 <table id="chessboard"></table>
 
 <script>
-  const board = document.getElementById('chessboard');
+  // Unicode des pièces
+  const piecesUnicode = {
+    'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'p': '♟',  // noirs
+    'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', 'P': '♙'   // blancs
+  };
 
-  // Crée 8x8 cases avec alternance noir/blanc
-  for(let row=8; row>=1; row--) {
-    const tr = document.createElement('tr');
-    for(let col=1; col<=8; col++) {
-      const td = document.createElement('td');
-      // Cases blanches si la somme des indices est paire, sinon noires
-      const isWhite = (row + col) % 2 === 0;
-      td.className = isWhite ? 'white' : 'black';
-      td.dataset.position = String.fromCharCode(96+col) + row; // a8, b8 ...
-      td.addEventListener('click', () => {
-        // Toggle sélection (juste un effet visuel)
-        if(td.classList.contains('selected')) {
-          td.classList.remove('selected');
+  // Plateau en notation FEN simplifiée (8 lignes, chaque lettre = pièce, chiffres = cases vides)
+  // Pour simplifier, on écrit tout en lettres (pas de chiffres), '.' = case vide
+  let boardState = [
+    "rnbqkbnr",
+    "pppppppp",
+    "........",
+    "........",
+    "........",
+    "........",
+    "PPPPPPPP",
+    "RNBQKBNR"
+  ];
+
+  const board = document.getElementById('chessboard');
+  let selectedCell = null;
+  let selectedPos = null;
+
+  // Crée le tableau HTML avec les cases et pièces
+  function drawBoard() {
+    board.innerHTML = '';
+    for(let row=8; row>=1; row--) {
+      const tr = document.createElement('tr');
+      for(let col=1; col<=8; col++) {
+        const td = document.createElement('td');
+        const isWhite = (row + col) % 2 === 0;
+        td.className = isWhite ? 'white' : 'black';
+
+        // Position en notation a1, b1 ...
+        const pos = String.fromCharCode(96 + col) + row;
+        td.dataset.position = pos;
+
+        // Récupère la pièce à cette position dans boardState
+        // boardState[0] = rang 8, donc ligne = 8 - row (car row descend de 8 à 1)
+        const pieceChar = boardState[8 - row][col - 1];
+        if(pieceChar !== '.') {
+          td.textContent = piecesUnicode[pieceChar];
+          td.dataset.piece = pieceChar;
         } else {
-          // Désélectionne les autres cases
-          document.querySelectorAll('td.selected').forEach(c => c.classList.remove('selected'));
-          td.classList.add('selected');
-          console.log('Case sélectionnée:', td.dataset.position);
+          td.dataset.piece = '';
         }
-      });
-      tr.appendChild(td);
+
+        td.addEventListener('click', () => cellClicked(td));
+
+        tr.appendChild(td);
+      }
+      board.appendChild(tr);
     }
-    board.appendChild(tr);
   }
+
+  // Vérifie si un pion peut se déplacer de selectedPos à destPos
+  // Exemple simple : pions blancs avancent vers le haut (ligne ++), noirs vers le bas (ligne --)
+  function validPawnMove(piece, from, to) {
+    const fromCol = from.charCodeAt(0);
+    const fromRow = parseInt(from[1]);
+    const toCol = to.charCodeAt(0);
+    const toRow = parseInt(to[1]);
+    const dir = piece === 'P' ? 1 : -1; // blanc monte (row+1), noir descend (row-1)
+    
+    // Avancer d'une case si vide
+    if(toCol === fromCol && toRow === fromRow + dir) {
+      if(getPieceAt(to) === '') return true;
+    }
+    // Premier déplacement : avancer de deux cases si vides
+    if(toCol === fromCol && ((piece === 'P' && fromRow === 2) || (piece === 'p' && fromRow === 7)) && toRow === fromRow + 2*dir) {
+      // Vérifie case intermédiaire vide
+      const intermediatePos = String.fromCharCode(fromCol) + (fromRow + dir);
+      if(getPieceAt(to) === '' && getPieceAt(intermediatePos) === '') return true;
+    }
+    // Capture diagonale
+    if(Math.abs(toCol - fromCol) === 1 && toRow === fromRow + dir) {
+      const targetPiece = getPieceAt(to);
+      if(targetPiece !== '' && isOppositeColor(piece, targetPiece)) return true;
+    }
+    return false;
+  }
+
+  // Fonction simple qui vérifie la couleur (majuscule = blanc, minuscule = noir)
+  function isOppositeColor(p1, p2) {
+    if(!p1 || !p2) return false;
+    return (p1 === p1.toUpperCase()) !== (p2 === p2.toUpperCase());
+  }
+
+  // Récupère la pièce à une position dans boardState
+  function getPieceAt(pos) {
+    const col = pos.charCodeAt(0) - 96; // a=1
+    const row = parseInt(pos[1]);
+    return boardState[8 - row][col - 1];
+  }
+
+  // Modifie la pièce à une position dans boardState
+  function setPieceAt(pos, pieceChar) {
+    const col = pos.charCodeAt(0) - 96;
+    const row = parseInt(pos[1]);
+    const rowIdx = 8 - row;
+    const line = boardState[rowIdx];
+    boardState[rowIdx] = line.substring(0, col - 1) + pieceChar + line.substring(col);
+  }
+
+  // Gestion du clic sur une case
+  function cellClicked(cell) {
+    const pos = cell.dataset.position;
+    const piece = getPieceAt(pos);
+
+    // Si pas de pièce sélectionnée ET la case a une pièce
+    if(!selectedCell && piece !== '.') {
+      selectedCell = cell;
+      selectedPos = pos;
+      cell.classList.add('selected');
+      highlightMoves(pos);
+    }
+    // Si une case est déjà sélectionnée et que tu recliques dessus => désélection
+    else if(selectedCell === cell) {
+      clearHighlights();
+      selectedCell = null;
+      selectedPos = null;
+    }
+    // Sinon, essayer de déplacer pièce sélectionnée vers la case cliquée
+    else if(selectedCell) {
+      // Vérifier si le déplacement est valide pour un pion (exemple)
+      const selectedPiece = getPieceAt(selectedPos);
+      if(selectedPiece.toUpperCase() === 'P' && validPawnMove(selectedPiece, selectedPos, pos)) {
+        // Déplacer la pièce
+        setPieceAt(pos, selectedPiece);
+        setPieceAt(selectedPos, '.');
+        clearHighlights();
+        selectedCell = null;
+        selectedPos = null;
+        drawBoard();
+      } else {
+        // Sinon désélectionne tout
+        clearHighlights();
+        selectedCell = null;
+        selectedPos = null;
+      }
+    }
+  }
+
+  // Montre en vert les cases où la pièce sélectionnée peut aller (uniquement pour pion ici)
+  function highlightMoves(pos) {
+    clearHighlights();
+    const piece = getPieceAt(pos);
+    if(piece.toUpperCase() === 'P') {
+      const possibleMoves = [];
+      const fromCol = pos.charCodeAt(0);
+      const fromRow = parseInt(pos[1]);
+      const dir = piece === 'P' ? 1 : -1;
+
+      // Avancer 1 case
+      const oneStep = String.fromCharCode(fromCol) + (fromRow + dir);
+      if(validPawnMove(piece, pos, oneStep)) possibleMoves.push(oneStep);
+
+      // Avancer 2 cases (premier coup)
+      const twoStep = String.fromCharCode(fromCol) + (fromRow + 2 * dir);
+      if(validPawnMove(piece, pos, twoStep)) possibleMoves.push(twoStep);
+
+      // Capture diagonale gauche
+      const diagLeft = String.fromCharCode(fromCol - 1) + (fromRow + dir);
+      if(validPawnMove(piece, pos, diagLeft)) possibleMoves.push(diagLeft);
+
+      // Capture diagonale droite
+      const diagRight = String.fromCharCode(fromCol + 1) + (fromRow + dir);
+      if(validPawnMove(piece, pos, diagRight)) possibleMoves.push(diagRight);
+
+      // Colorie les cases valides
+      possibleMoves.forEach(move => {
+        const cell = document.querySelector(`td[data-position='${move}']`);
+        if(cell) cell.classList.add('highlight');
+      });
+    }
+  }
+
+  function clearHighlights() {
+    document.querySelectorAll('td.selected').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll('td.highlight').forEach(c => c.classList.remove('highlight'));
+  }
+
+  drawBoard();
 </script>
 
 </body>
 </html>
-
-
-</body>
-</html>
-
