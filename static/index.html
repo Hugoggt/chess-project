@@ -1,8 +1,53 @@
 <!DOCTYPE html>
 <html lang="fr">
-<head><meta charset="UTF-8"><title>Test</title></head>
+<head>
+    <meta charset="UTF-8" />
+    <title>Échiquier fonctionnel</title>
+    <link rel="stylesheet" href="https://unpkg.com/chessboardjs@1.0.0/css/chessboard-1.0.0.min.css" />
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        #board {
+            width: 480px;
+        }
+    </style>
+</head>
 <body>
-  <h1>Ça marche !</h1>
+
+<div id="board"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+<script src="https://unpkg.com/chessboardjs@1.0.0/js/chessboard-1.0.0.min.js"></script>
+
+<script>
+    const board = Chessboard('board', {
+        draggable: true,
+        dropOffBoard: 'snapback',
+        position: 'start',
+        onDrop: handleMove,
+    });
+
+    const game = new Chess();
+
+    function handleMove(source, target) {
+        // Essaye de faire le coup dans la logique de Chess.js
+        const move = game.move({
+            from: source,
+            to: target,
+            promotion: 'q' // promotion par défaut en reine
+        });
+
+        // Si le coup est invalide, annule le mouvement sur l’échiquier
+        if (move === null) return 'snapback';
+    }
+</script>
+
 </body>
 </html>
 
