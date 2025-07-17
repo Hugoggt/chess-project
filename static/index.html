@@ -1,177 +1,104 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8" />
-<title>Échiquier fonctionnel</title>
-<style>
-  body {
-    margin: 0; padding: 0; 
-    background-color: #0b1e4d; /* bleu nuit */
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh;
-    color: white;
-    font-family: Arial, sans-serif;
-  }
-  #board {
-    display: grid;
-    grid-template-columns: repeat(8, 60px);
-    grid-template-rows: repeat(8, 60px);
-    border: 3px solid white;
-    box-shadow: 0 0 10px #0066ff;
-  }
-  .square {
-    width: 60px;
-    height: 60px;
-    line-height: 60px;
-    font-size: 40px;
-    text-align: center;
-    user-select: none;
-    cursor: pointer;
-  }
-  .white {
-    background-color: #f0d9b5;
-  }
-  .black {
-    background-color: #b58863;
-  }
-  .highlight {
-    outline: 3px solid yellow;
-  }
-  #status {
-    margin-top: 20px;
-    text-align: center;
-    font-weight: bold;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <title>Échiquier interactif</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" />
+  <style>
+    body {
+      background-color: #001f3f; /* bleu nuit */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      flex-direction: column;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+    #board {
+      width: 480px;
+    }
+    #status {
+      margin-top: 10px;
+      font-size: 18px;
+    }
+  </style>
 </head>
 <body>
-
-<div>
   <div id="board"></div>
-  <div id="status">Chargement...</div>
-</div>
+  <div id="status">Votre tour (blancs)</div>
 
-<script>
-  const unicodePieces = {
-    'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔',
-    'p': '♟', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚'
-  };
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+  <script>
+    let board = null;
+    let game = new Chess();
 
-  const boardEl = document.getElementById('board');
-  const statusEl = document.getElementById('status');
+    const statusEl = document.getElementById('status');
 
-  let boardState = null;
-  let selectedSquare = null;
-  let legalMovesFromSelected = [];
+    // Initialiser l'échiquier
+    function initBoard(fen) {
+      if (board) board.destroy();
 
-  // Générer l'échiquier vide avec les cases colorées
-  function createBoard() {
-    boardEl.innerHTML = '';
-    for(let rank = 7; rank >= 0; rank--) {
-      for(let file = 0; file < 8; file++) {
-        const square = document.createElement('div');
-        square.id = `${String.fromCharCode(97 + file)}${rank + 1}`;
-        square.className = 'square ' + ((file + rank) % 2 === 0 ? 'white' : 'black');
-        square.addEventListener('click', () => onSquareClick(square.id));
-        boardEl.appendChild(square);
-      }
+      board = Chessboard('board', {
+        position: fen,
+        draggable: true,
+        orientation: 'white',
+        onDrop: handleMove,
+      });
     }
-  }
 
-  // Mettre à jour l'échiquier en affichant les pièces selon le FEN
-  function updateBoard(fen) {
-    const parts = fen.split(' ');
-    const rows = parts[0].split('/');
-    for(let rank = 7; rank >= 0; rank--) {
-      let file = 0;
-      for(const char of rows[7-rank]) {
-        const squareId = `${String.fromCharCode(97 + file)}${rank + 1}`;
-        const squareEl = document.getElementById(squareId);
-        if(/[1-8]/.test(char)) {
-          for(let i = 0; i < parseInt(char); i++) {
-            const sq = document.getElementById(`${String.fromCharCode(97 + file)}${rank + 1}`);
-            sq.textContent = '';
-            file++;
-          }
-        } else {
-          squareEl.textContent = unicodePieces[char] || '';
-          file++;
-        }
-      }
+    // Charger l'état initial depuis backend
+    async function loadBoard() {
+      const resp = await fetch('/board');
+      const data = await resp.json();
+      game.load(data.fen);
+      initBoard(data.fen);
+      updateStatus(data);
     }
-  }
 
-  // Gestion du clic sur une case
-  async function onSquareClick(squareId) {
-    if (!boardState || boardState.is_game_over) return;
-
-    if (!selectedSquare) {
-      // Sélectionner une pièce si elle appartient au joueur (blancs)
-      const piece = document.getElementById(squareId).textContent;
-      if (piece && piece === piece.toUpperCase()) {
-        selectedSquare = squareId;
-        highlightLegalMoves(squareId);
-      }
-    } else {
-      // Essayer de jouer le coup selectedSquare -> squareId
-      const move = selectedSquare + squareId;
-      if (legalMovesFromSelected.includes(move)) {
-        const response = await fetch('/play_move', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({move_uci: move})
-        });
-        const data = await response.json();
-        if (response.ok) {
-          boardState = data;
-          updateBoard(data.fen);
-          statusEl.textContent = boardState.is_game_over ? `Partie terminée: ${boardState.result}` : `Coup joué: ${move}` + (data.ai_move ? ` | Coup IA: ${data.ai_move}` : '');
-          selectedSquare = null;
-          clearHighlights();
-        } else {
-          alert(data.error);
-          selectedSquare = null;
-          clearHighlights();
-        }
+    function updateStatus(data) {
+      if (data.is_game_over) {
+        if (data.result === "1-0") statusEl.textContent = "Échec et mat ! Vous avez gagné.";
+        else if (data.result === "0-1") statusEl.textContent = "Échec et mat ! L'IA a gagné.";
+        else statusEl.textContent = "Partie terminée (nul).";
       } else {
-        // Annuler la sélection
-        selectedSquare = null;
-        clearHighlights();
+        statusEl.textContent = "Votre tour (blancs)";
       }
     }
-  }
 
-  // Affiche les coups légaux possibles depuis une case sélectionnée
-  function highlightLegalMoves(squareId) {
-    clearHighlights();
-    legalMovesFromSelected = boardState.legal_moves.filter(mv => mv.startsWith(squareId));
-    document.getElementById(squareId).classList.add('highlight');
-    legalMovesFromSelected.forEach(mv => {
-      const toSquare = mv.slice(2,4);
-      document.getElementById(toSquare).classList.add('highlight');
-    });
-  }
+    // Quand le joueur déplace une pièce
+    async function handleMove(source, target, piece, newPos, oldPos, orientation) {
+      const move = source + target;
+      const resp = await fetch('/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uci: move })
+      });
 
-  // Enlever les surbrillances
-  function clearHighlights() {
-    document.querySelectorAll('.highlight').forEach(el => el.classList.remove('highlight'));
-    legalMovesFromSelected = [];
-  }
+      if (!resp.ok) {
+        alert("Coup illégal ou erreur serveur");
+        board.position(game.fen()); // reset la position
+        return 'snapback';
+      }
 
-  // Initialisation
-  async function init() {
-    createBoard();
-    const response = await fetch('/board_state');
-    boardState = await response.json();
-    updateBoard(boardState.fen);
-    statusEl.textContent = "À vous de jouer (blancs)";
-  }
+      const data = await resp.json();
+      game.load(data.fen);
+      board.position(data.fen);
 
-  init();
-</script>
+      updateStatus(data);
 
+      if (data.is_game_over) {
+        alert("Partie terminée : " + data.result);
+      }
+
+      return;
+    }
+
+    loadBoard();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/chess.js@1.0.0/chess.min.js"></script>
 </body>
 </html>
 
