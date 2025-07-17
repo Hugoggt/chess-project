@@ -76,7 +76,9 @@ def play_move(move: MoveRequest):
 
 def is_valid_move(piece, fr, fc, tr, tc, ignore_check=False):
     target = board[tr][tc]
-    if target and target[0] == piece[0]:
+
+    # ← CORRECTION ICI
+    if not ignore_check and target and target[0] == piece[0]:
         return False
 
     dx, dy = tr - fr, tc - fc
@@ -111,7 +113,7 @@ def is_valid_move(piece, fr, fc, tr, tc, ignore_check=False):
     elif name == 'Q':
         valid = (fr == tr or fc == tc or abs(dx) == abs(dy)) and clear_path()
     elif name == 'N':
-        valid = (abs(dx), abs(dy)) in [(1, 2), (2, 1)]
+        valid = (abs(dx), abs(dy) in [(1, 2), (2, 1)])
     elif name == 'K':
         valid = max(abs(dx), abs(dy)) == 1
 
@@ -121,7 +123,7 @@ def is_valid_move(piece, fr, fc, tr, tc, ignore_check=False):
     if ignore_check:
         return True
 
-    # Simulation du coup pour vérifier l’échec
+    # Vérifie que le coup ne met pas notre roi en échec
     saved_from, saved_to = board[fr][fc], board[tr][tc]
     board[tr][tc] = piece
     board[fr][fc] = ''
@@ -129,6 +131,7 @@ def is_valid_move(piece, fr, fc, tr, tc, ignore_check=False):
     board[fr][fc] = saved_from
     board[tr][tc] = saved_to
     return not in_check
+
 
 def is_in_check(color):
     king_pos = find_king(color)
