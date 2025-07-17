@@ -9,49 +9,48 @@ app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-board = chess.Board()
+board = chess.Board()  # partie globale (attention en vrai multi-user il faut autre chose !)
 
 class MoveRequest(BaseModel):
-    move_uci: str  # coup en notation UCI, ex: "e2e4"
+    uci: str  # mouvement en notation UCI, ex: e2e4
 
 @app.get("/", response_class=HTMLResponse)
 def get_index():
     with open("static/index.html", "r", encoding="utf-8") as f:
         return f.read()
 
-@app.get("/board_state")
-def get_board_state():
-    # Retourne la position actuelle en FEN et la liste des coups légaux en UCI
-    return {
-        "fen": board.fen(),
-        "legal_moves": [move.uci() for move in board.legal_moves],
-        "is_game_over": board.is_game_over(),
-        "result": board.result() if board.is_game_over() else None
-    }
+@app.get("/board")
+def get_board():
+    return {"fen": board.fen(), "is_game_over": board.is_game_over(), "result": board.result() if board.is_game_over() else None}
 
-@app.post("/play_move")
-def play_move(move: MoveRequest):
+@app.post("/move")
+def play_move(move_req: MoveRequest):
     global board
     try:
-        chess_move = chess.Move.from_uci(move.move_uci)
-        if chess_move not in board.legal_moves:
-            return JSONResponse(status_code=400, content={"error": "Coup illégal"})
-        board.push(chess_move)
+        move = chess.Move.from_uci(move_req.uci)
+        if move not in board.legal_moves:
+            return JSONResponse({"error": "Illegal move"}, status_code=400)
+        board.push(move)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    
+    # Si partie finie après le coup du joueur
+    if board.is_game_over():
+        return {"fen": board.fen(), "is_game_over": True, "result": board.result()}
+    
+    # Coup de l'IA (joue noir)
+    ai_move = choose_ai_move(board)
+    board.push(ai_move)
+    
+    # Résultat après le coup IA
+    return {"fen": board.fen(), "ai_move": ai_move.uci(), "is_game_over": board.is_game_over(), "result": board.result() if board.is_game_over() else None}
 
-        # IA joue un coup simple random (plus tard, tu peux intégrer une vraie IA RL)
-        import random
-        if not board.is_game_over():
-            ai_move = random.choice(list(board.legal_moves))
-            board.push(ai_move)
-        else:
-            ai_move = None
+def choose_ai_move(board):
+    # Ici choix simple : coup aléatoire parmi les coups légaux pour noir
+    import random
+    moves = list(board.legal_moves)
+    return random.choice(moves)
 
-        return {
-            "fen": board.fen(),
-            "ai_move": ai_move.uci() if ai_move else None,
-            "is_game_over": board.is_game_over(),
-            "result": board.result() if board.is_game_over() else None
-        }
     except Exception as e:
         return JSONResponse(status_code=400, content={"error": str(e)})
 
