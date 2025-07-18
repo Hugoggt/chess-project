@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Optional
@@ -43,35 +43,30 @@ def get_board():
 @app.post("/move")
 def play_move(move: MoveRequest):
     if board.is_game_over():
-        return JSONResponse(content={"error": "Game is over."}, status_code=400)
+        return get_board()
+
+    move_uci = move.from_square + move.to_square
+    if move.promotion:
+        move_uci += move.promotion.lower()
 
     try:
-        move_uci = move.from_square + move.to_square
-        if move.promotion:
-            move_uci += move.promotion.lower()
-
         uci_move = chess.Move.from_uci(move_uci)
         if uci_move in board.legal_moves:
             board.push(uci_move)
-        else:
-            return JSONResponse(content={"error": "Illegal move"}, status_code=400)
+            if not board.is_game_over():
+                legal = list(board.legal_moves)
+                if legal:
+                    board.push(random.choice(legal))
     except:
-        return JSONResponse(content={"error": "Invalid move format"}, status_code=400)
-
-    if not board.is_game_over():
-        legal = list(board.legal_moves)
-        if legal:
-            board.push(random.choice(legal))
+        pass  # Invalid move or format: do nothing
 
     return get_board()
-
 
 @app.post("/restart")
 def restart_game():
     global board
     board = chess.Board()
     return get_board()
-
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
