@@ -17,6 +17,7 @@ board = chess.Board()
 class MoveRequest(BaseModel):
     from_square: str  # like 'e2'
     to_square: str    # like 'e4'
+    promotion: Optional[str] = None  # 'q', 'r', 'b', or 'n'
 
 @app.get("/", response_class=HTMLResponse)
 def get_index():
@@ -31,7 +32,9 @@ def get_board():
         "legal_moves": [move.uci() for move in board.legal_moves],
         "is_check": board.is_check(),
         "is_checkmate": board.is_checkmate(),
+        "is_stalemate": board.is_stalemate(),
         "winner": None,
+        "is_game_over": board.is_game_over(),
     }
     if board.is_checkmate():
         board_state["winner"] = "black" if board.turn == chess.WHITE else "white"
@@ -43,7 +46,11 @@ def play_move(move: MoveRequest):
         return JSONResponse(content={"error": "Game is over."}, status_code=400)
 
     try:
-        uci_move = chess.Move.from_uci(move.from_square + move.to_square)
+        move_uci = move.from_square + move.to_square
+        if move.promotion:
+            move_uci += move.promotion.lower()
+
+        uci_move = chess.Move.from_uci(move_uci)
         if uci_move in board.legal_moves:
             board.push(uci_move)
         else:
