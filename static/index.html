@@ -134,17 +134,20 @@
       const res = await fetch('/board');
       const data = await res.json();
       drawBoard(data.fen);
-
+    
       if (data.is_checkmate) {
         status.textContent = `Échec et mat ! Gagnant : ${data.winner}`;
+        showGameOverModal(`Échec et mat ! ${data.winner} gagne.`);
       } else if (data.is_stalemate) {
         status.textContent = "Partie nulle (pat)";
+        showGameOverModal("Partie nulle (pat)");
       } else if (data.is_check) {
         status.textContent = "Échec au roi !";
       } else {
         status.textContent = `Tour : ${data.turn}`;
       }
     }
+
 
     function handleSquareClick(row, col) {
       const squareName = String.fromCharCode('a'.charCodeAt(0) + col) + (8 - row);
@@ -211,8 +214,32 @@
       }
     }
 
+
+    function showGameOverModal(message) {
+      document.getElementById('gameOverMessage').textContent = message;
+      document.getElementById('gameOverModal').style.display = 'block';
+    }
+    
+    async function restartGame() {
+      const res = await fetch('/restart', { method: 'POST' });
+      const data = await res.json();
+      drawBoard(data.fen);
+      document.getElementById('gameOverModal').style.display = 'none';
+      status.textContent = `Tour : ${data.turn}`;
+    }
+
     fetchBoard();
   </script>
+
+
+<div id="gameOverModal" style="display:none; position:fixed; top:30%; left:50%; transform:translate(-50%, -50%);
+     background:#222; color:white; padding:30px; border:3px solid white; border-radius:10px; text-align:center;">
+  <p id="gameOverMessage" style="font-size: 20px; margin-bottom: 15px;"></p>
+  <button onclick="restartGame()" style="padding:10px 20px; font-size:18px; background:#00aaff; color:white; border:none; border-radius:5px; cursor:pointer;">
+    Recommencer
+  </button>
+</div>
+  
 </body>
 </html>
 
