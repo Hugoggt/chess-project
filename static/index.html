@@ -1,144 +1,142 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Jeu d'Échecs</title>
+  <title>Play Chess vs AI</title>
   <style>
     body {
-      background-color: #121826;
+      background-color: #1a1a2e;
+      color: #f8f8f2;
+      font-family: 'Segoe UI', sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
-      color: #f0e6d2;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      margin: 0;
-      padding: 0;
     }
 
     h1 {
-      margin-top: 30px;
-      font-size: 2.5em;
-      color: #ffd700;
-      text-shadow: 1px 1px 5px #000;
+      margin-top: 20px;
     }
 
-    #chessboard {
+    #board {
       display: grid;
-      grid-template-columns: repeat(8, 70px);
-      grid-template-rows: repeat(8, 70px);
-      margin-top: 40px;
-      border: 4px solid #f0e6d2;
-      box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+      grid-template-columns: repeat(8, 60px);
+      grid-template-rows: repeat(8, 60px);
+      margin-top: 30px;
+      border: 4px solid white;
     }
 
     .square {
-      width: 70px;
-      height: 70px;
+      width: 60px;
+      height: 60px;
       display: flex;
-      justify-content: center;
       align-items: center;
-      font-size: 42px;
+      justify-content: center;
+      font-size: 36px;
       cursor: pointer;
-      transition: background-color 0.2s, transform 0.2s;
     }
 
-    .white {
-      background-color: #f4e8c1;
-      color: #222;
-    }
-
-    .black {
-      background-color: #1e2a38;
-      color: #f0e6d2;
-    }
-
-    .square:hover {
-      transform: scale(1.03);
-    }
-
-    .selected {
-      outline: 3px solid #ffd700;
-      box-shadow: 0 0 10px #ffd700;
-    }
+    .white { background-color: #e0e0e0; }
+    .black { background-color: #505050; }
+    .selected { outline: 3px solid yellow; }
 
     #status {
-      margin-top: 25px;
-      font-size: 1.2em;
-      padding: 10px 20px;
-      background-color: #1f2c3b;
-      border-radius: 8px;
-      border: 1px solid #ffd70088;
-      box-shadow: 0 0 10px rgba(255, 215, 0, 0.1);
+      margin-top: 20px;
+      font-size: 18px;
     }
   </style>
 </head>
 <body>
-  <h1>Échecs de Slim</h1>
-  <div id="chessboard"></div>
-  <div id="status">Cliquez sur une pièce puis sur une case</div>
+  <h1>Play Chess vs AI</h1>
+  <div id="board"></div>
+  <div id="status">Your turn (white)</div>
 
   <script>
-    const board = document.getElementById('chessboard');
-
-    // Position initiale
-    let position = [
-      ["♜","♞","♝","♛","♚","♝","♞","♜"],
-      ["♟","♟","♟","♟","♟","♟","♟","♟"],
-      ["","","","","","","",""],
-      ["","","","","","","",""],
-      ["","","","","","","",""],
-      ["","","","","","","",""],
-      ["♙","♙","♙","♙","♙","♙","♙","♙"],
-      ["♖","♘","♗","♕","♔","♗","♘","♖"]
-    ];
-
+    const boardDiv = document.getElementById('board');
+    const statusDiv = document.getElementById('status');
     let selected = null;
+    let currentFEN = "";
 
-    function drawBoard() {
-      board.innerHTML = '';
-      for (let row = 0; row < 8; row++) {
-        for (let col = 0; col < 8; col++) {
-          const square = document.createElement('div');
-          square.className = 'square ' + ((row + col) % 2 === 0 ? 'white' : 'black');
-          square.dataset.row = row;
-          square.dataset.col = col;
-          square.textContent = position[row][col];
-          square.addEventListener('click', handleClick);
-          board.appendChild(square);
+    const pieceUnicode = {
+      p: '♟', r: '♜', n: '♞', b: '♝', q: '♛', k: '♚',
+      P: '♙', R: '♖', N: '♘', B: '♗', Q: '♕', K: '♔'
+    };
+
+    function fetchBoard() {
+      fetch('/board')
+        .then(res => res.json())
+        .then(data => {
+          drawBoard(data.fen);
+          if (data.is_checkmate) {
+            statusDiv.textContent = `Checkmate! Winner: ${data.winner}`;
+          } else if (data.is_check) {
+            statusDiv.textContent = `${data.turn} is in check`;
+          } else {
+            statusDiv.textContent = `${data.turn}'s turn`;
+          }
+        });
+    }
+
+    function drawBoard(fen) {
+      currentFEN = fen;
+      boardDiv.innerHTML = '';
+      const rows = fen.split(' ')[0].split('/');
+      for (let i = 0; i < 8; i++) {
+        let row = rows[i];
+        let colIndex = 0;
+        for (const char of row) {
+          if (!isNaN(char)) {
+            for (let j = 0; j < parseInt(char); j++) {
+              addSquare(i, colIndex++, '');
+            }
+          } else {
+            addSquare(i, colIndex++, pieceUnicode[char] || '');
+          }
         }
       }
     }
 
-    function handleClick(e) {
-      const row = parseInt(e.target.dataset.row);
-      const col = parseInt(e.target.dataset.col);
+    function addSquare(row, col, piece) {
+      const square = document.createElement('div');
+      const isWhite = (row + col) % 2 === 0;
+      square.className = `square ${isWhite ? 'white' : 'black'}`;
+      square.dataset.row = row;
+      square.dataset.col = col;
+      square.textContent = piece;
+      square.onclick = () => handleClick(row, col);
+      boardDiv.appendChild(square);
+    }
 
+    function algebraic(row, col) {
+      return 'abcdefgh'[col] + (8 - row);
+    }
+
+    function handleClick(row, col) {
+      const square = document.querySelector(`[data-row='${row}'][data-col='${col}']`);
       if (selected) {
         const [fromRow, fromCol] = selected;
-        const piece = position[fromRow][fromCol];
-        const destination = position[row][col];
-
-        // Move the piece
-        position[row][col] = piece;
-        position[fromRow][fromCol] = "";
+        move(algebraic(fromRow, fromCol), algebraic(row, col));
         selected = null;
-        drawBoard();
-        updateStatus(`Déplacement effectué : ${piece} vers (${row+1}, ${col+1})`);
-      } else if (position[row][col] !== "") {
+      } else {
         selected = [row, col];
-        e.target.classList.add("selected");
-        updateStatus(`Pièce sélectionnée : ${position[row][col]}`);
+        square.classList.add('selected');
       }
     }
 
-    function updateStatus(msg) {
-      document.getElementById('status').textContent = msg;
+    function move(from, to) {
+      fetch('/move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from_square: from, to_square: to })
+      })
+      .then(res => res.json())
+      .then(() => fetchBoard());
     }
 
-    drawBoard();
+    fetchBoard();
   </script>
 </body>
 </html>
+
 
 </body>
 </html>
