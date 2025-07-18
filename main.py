@@ -65,6 +65,14 @@ def play_move(move: MoveRequest):
 
     return get_board()
 
+
+@app.post("/restart")
+def restart_game():
+    global board
+    board = chess.Board()
+    return get_board()
+
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
 
