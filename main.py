@@ -2,9 +2,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import Optional
+from typing import List, Optional
 import random
 import uvicorn
+
 import chess
 
 app = FastAPI()
@@ -13,9 +14,9 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 board = chess.Board()
 
 class MoveRequest(BaseModel):
-    from_square: str
-    to_square: str
-    promotion: Optional[str] = None
+    from_square: str  # like 'e7'
+    to_square: str    # like 'e8'
+    promotion: Optional[str] = None  # 'q', 'r', 'b', or 'n'
 
 @app.get("/", response_class=HTMLResponse)
 def get_index():
@@ -36,6 +37,8 @@ def get_board():
     }
     if board.is_checkmate():
         board_state["winner"] = "black" if board.turn == chess.WHITE else "white"
+    elif board.is_stalemate():
+        board_state["winner"] = "draw"
     return board_state
 
 @app.post("/move")
@@ -51,12 +54,14 @@ def play_move(move: MoveRequest):
         uci_move = chess.Move.from_uci(move_uci)
         if uci_move in board.legal_moves:
             board.push(uci_move)
+
+            # AI random move if game not over
             if not board.is_game_over():
                 legal = list(board.legal_moves)
                 if legal:
                     board.push(random.choice(legal))
     except:
-        pass
+        pass  # do nothing if move is invalid
 
     return get_board()
 
@@ -68,6 +73,7 @@ def restart_game():
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
 
 
 
