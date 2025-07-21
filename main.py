@@ -1,11 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
 import random
 import uvicorn
-
 import chess
 
 app = FastAPI()
@@ -14,9 +13,9 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 board = chess.Board()
 
 class MoveRequest(BaseModel):
-    from_square: str  # like 'e2'
-    to_square: str    # like 'e4'
-    promotion: Optional[str] = None  # 'q', 'r', 'b', or 'n'
+    from_square: str
+    to_square: str
+    promotion: Optional[str] = None
 
 @app.get("/", response_class=HTMLResponse)
 def get_index():
@@ -56,8 +55,8 @@ def play_move(move: MoveRequest):
                 legal = list(board.legal_moves)
                 if legal:
                     board.push(random.choice(legal))
-    except Exception as e:
-        return {"error": str(e)}
+    except:
+        pass
 
     return get_board()
 
@@ -69,6 +68,7 @@ def restart_game():
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
 
 
 
