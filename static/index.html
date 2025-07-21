@@ -12,12 +12,10 @@
       font-family: "Segoe UI", sans-serif;
       color: white;
     }
-
     h1 {
       margin-top: 20px;
       color: #f5f5f5;
     }
-
     #chessboard {
       display: grid;
       grid-template-columns: repeat(8, 70px);
@@ -25,7 +23,6 @@
       margin: 30px 0;
       border: 4px solid #ffffff;
     }
-
     .square {
       width: 70px;
       height: 70px;
@@ -36,26 +33,21 @@
       cursor: pointer;
       user-select: none;
     }
-
     .white {
       background-color: #f2e5d7;
       color: black;
     }
-
     .black {
       background-color: #3b4b61;
       color: white;
     }
-
     .selected {
       outline: 4px solid yellow;
     }
-
     #status {
       margin-bottom: 20px;
       font-size: 18px;
     }
-
     #promotionModal {
       display: none;
       position: fixed;
@@ -66,7 +58,6 @@
       border: 3px solid #fff;
       border-radius: 10px;
     }
-
     #promotionModal button {
       font-size: 30px;
       margin: 5px;
@@ -74,30 +65,6 @@
       border: none;
       cursor: pointer;
       color: white;
-    }
-
-    #gameOverModal {
-      display: none;
-      position: fixed;
-      top: 30%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: #222;
-      color: white;
-      padding: 30px;
-      border: 3px solid white;
-      border-radius: 10px;
-      text-align: center;
-    }
-
-    #gameOverModal button {
-      padding: 10px 20px;
-      font-size: 18px;
-      background: #00aaff;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
     }
   </style>
 </head>
@@ -114,34 +81,32 @@
     <button data-piece="n">♘</button>
   </div>
 
-  <div id="gameOverModal">
-    <p id="gameOverMessage" style="font-size: 20px; margin-bottom: 15px;"></p>
-    <button onclick="restartGame()">Recommencer</button>
-  </div>
-
   <script>
     const boardElement = document.getElementById('chessboard');
     const status = document.getElementById('status');
     const promotionModal = document.getElementById('promotionModal');
     let from = null;
     let promotionCallback = null;
+    let currentFEN = "";
 
     const pieceSymbols = {
       p: '♟', r: '♜', n: '♞', b: '♝', q: '♛', k: '♚',
       P: '♙', R: '♖', N: '♘', B: '♗', Q: '♕', K: '♔'
     };
 
-    function createSquare(row, col, piece) {
+    function createSquare(row, col, pieceLetter) {
       const square = document.createElement('div');
       square.className = `square ${(row + col) % 2 === 0 ? 'white' : 'black'}`;
       square.dataset.row = row;
       square.dataset.col = col;
-      square.textContent = pieceSymbols[piece] || '';
+      square.dataset.piece = pieceLetter;
+      square.textContent = pieceSymbols[pieceLetter] || '';
       square.addEventListener('click', () => handleSquareClick(row, col));
       boardElement.appendChild(square);
     }
 
     function drawBoard(fen) {
+      currentFEN = fen;
       const [piecePlacement] = fen.split(' ');
       const rows = piecePlacement.split('/');
       boardElement.innerHTML = '';
@@ -177,12 +142,11 @@
       }
     }
 
-    function getPieceAt(row, col) {
-      return boardElement.children[row * 8 + col].textContent || '';
-    }
-
     function handleSquareClick(row, col) {
       const squareName = String.fromCharCode('a'.charCodeAt(0) + col) + (8 - row);
+      const clickedSquare = boardElement.children[row * 8 + col];
+      const piece = clickedSquare.dataset.piece;
+
       if (!from) {
         from = squareName;
         document.querySelectorAll('.square').forEach(sq => {
@@ -194,9 +158,8 @@
         const to = squareName;
         document.querySelectorAll('.square').forEach(sq => sq.classList.remove('selected'));
 
-        const fromRow = 8 - parseInt(from[1]);
-        const piece = getPieceAt(fromRow, from.charCodeAt(0) - 97);
-        if ((piece === '♙' && to[1] === '8') || (piece === '♟' && to[1] === '1')) {
+        // Detect promotion case
+        if ((piece === 'P' && to[1] === '8') || (piece === 'p' && to[1] === '1')) {
           showPromotionModal(promo => {
             sendMove(from, to, promo);
           });
@@ -256,13 +219,16 @@
 
     fetchBoard();
   </script>
+
+  <div id="gameOverModal" style="display:none; position:fixed; top:30%; left:50%; transform:translate(-50%, -50%);
+       background:#222; color:white; padding:30px; border:3px solid white; border-radius:10px; text-align:center;">
+    <p id="gameOverMessage" style="font-size: 20px; margin-bottom: 15px;"></p>
+    <button onclick="restartGame()" style="padding:10px 20px; font-size:18px; background:#00aaff; color:white; border:none; border-radius:5px; cursor:pointer;">
+      Recommencer
+    </button>
+  </div>
 </body>
 </html>
 
-
-
-
-</body>
-</html>
 
 
