@@ -1,13 +1,12 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Optional
 import random
 import uvicorn
 
 import chess
-import chess.engine
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -57,8 +56,8 @@ def play_move(move: MoveRequest):
                 legal = list(board.legal_moves)
                 if legal:
                     board.push(random.choice(legal))
-    except:
-        pass  # Invalid move or format: do nothing
+    except Exception as e:
+        return {"error": str(e)}
 
     return get_board()
 
@@ -70,6 +69,7 @@ def restart_game():
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
 
 
 
