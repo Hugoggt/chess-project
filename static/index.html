@@ -1,234 +1,80 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Jeu d'échecs vs IA</title>
+  <title>Python Chess</title>
   <style>
-    body {
-      background-color: #0f1b2e;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      font-family: "Segoe UI", sans-serif;
-      color: white;
+    body { display: flex; justify-content: center; align-items: center; height: 100vh; background: #ddd; }
+    #board { display: grid; grid-template-columns: repeat(8, 60px); grid-template-rows: repeat(8, 60px); }
+    .cell {
+      width: 60px; height: 60px; display: flex; justify-content: center; align-items: center;
+      font-size: 32px; font-weight: bold; cursor: pointer;
     }
-    h1 {
-      margin-top: 20px;
-      color: #f5f5f5;
-    }
-    #chessboard {
-      display: grid;
-      grid-template-columns: repeat(8, 70px);
-      grid-template-rows: repeat(8, 70px);
-      margin: 30px 0;
-      border: 4px solid #ffffff;
-    }
-    .square {
-      width: 70px;
-      height: 70px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-size: 42px;
-      cursor: pointer;
-      user-select: none;
-    }
-    .white {
-      background-color: #f2e5d7;
-      color: black;
-    }
-    .black {
-      background-color: #3b4b61;
-      color: white;
-    }
-    .selected {
-      outline: 4px solid yellow;
-    }
-    #status {
-      margin-bottom: 20px;
-      font-size: 18px;
-    }
-    #promotionModal {
-      display: none;
-      position: fixed;
-      top: 30%;
-      background: #222;
-      color: white;
-      padding: 20px;
-      border: 3px solid #fff;
-      border-radius: 10px;
-    }
-    #promotionModal button {
-      font-size: 30px;
-      margin: 5px;
-      background: none;
-      border: none;
-      cursor: pointer;
-      color: white;
-    }
+    .white { background: #f0d9b5; }
+    .black { background: #b58863; }
+    .selected { outline: 3px solid red; }
   </style>
 </head>
 <body>
-  <h1>Échecs contre IA</h1>
-  <div id="chessboard"></div>
-  <div id="status">Votre tour</div>
-
-  <div id="promotionModal">
-    Promotion : <br/>
-    <button data-piece="q">♕</button>
-    <button data-piece="r">♖</button>
-    <button data-piece="b">♗</button>
-    <button data-piece="n">♘</button>
+  <div>
+    <div id="board"></div>
+    <button onclick="restart()">Restart</button>
   </div>
 
   <script>
-    const boardElement = document.getElementById('chessboard');
-    const status = document.getElementById('status');
-    const promotionModal = document.getElementById('promotionModal');
-    let from = null;
-    let promotionCallback = null;
-    let currentFEN = "";
+    let selected = null;
 
-    const pieceSymbols = {
-      p: '♟', r: '♜', n: '♞', b: '♝', q: '♛', k: '♚',
-      P: '♙', R: '♖', N: '♘', B: '♗', Q: '♕', K: '♔'
-    };
-
-    function createSquare(row, col, pieceLetter) {
-      const square = document.createElement('div');
-      square.className = `square ${(row + col) % 2 === 0 ? 'white' : 'black'}`;
-      square.dataset.row = row;
-      square.dataset.col = col;
-      square.dataset.piece = pieceLetter;
-      square.textContent = pieceSymbols[pieceLetter] || '';
-      square.addEventListener('click', () => handleSquareClick(row, col));
-      boardElement.appendChild(square);
-    }
-
-    function drawBoard(fen) {
-      currentFEN = fen;
-      const [piecePlacement] = fen.split(' ');
-      const rows = piecePlacement.split('/');
-      boardElement.innerHTML = '';
-      for (let row = 0; row < 8; row++) {
-        let col = 0;
-        for (const ch of rows[row]) {
-          if (isNaN(ch)) {
-            createSquare(row, col++, ch);
-          } else {
-            for (let i = 0; i < parseInt(ch); i++) {
-              createSquare(row, col++, '');
-            }
-          }
-        }
-      }
-    }
-
-    async function fetchBoard() {
+    async function getBoard() {
       const res = await fetch('/board');
       const data = await res.json();
-      drawBoard(data.fen);
-
-      if (data.is_checkmate) {
-        status.textContent = `Échec et mat ! Gagnant : ${data.winner}`;
-        showGameOverModal(`Échec et mat ! ${data.winner} gagne.`);
-      } else if (data.is_stalemate) {
-        status.textContent = "Partie nulle (pat)";
-        showGameOverModal("Partie nulle (pat)");
-      } else if (data.is_check) {
-        status.textContent = "Échec au roi !";
-      } else {
-        status.textContent = `Tour : ${data.turn}`;
-      }
+      drawBoard(data.board);
     }
 
-    function handleSquareClick(row, col) {
-      const squareName = String.fromCharCode('a'.charCodeAt(0) + col) + (8 - row);
-      const clickedSquare = boardElement.children[row * 8 + col];
-      const piece = clickedSquare.dataset.piece;
-
-      if (!from) {
-        from = squareName;
-        document.querySelectorAll('.square').forEach(sq => {
-          if (sq.dataset.row == row && sq.dataset.col == col) {
-            sq.classList.add('selected');
-          }
-        });
-      } else {
-        const to = squareName;
-        document.querySelectorAll('.square').forEach(sq => sq.classList.remove('selected'));
-
-        // Detect promotion case
-        if ((piece === 'P' && to[1] === '8') || (piece === 'p' && to[1] === '1')) {
-          showPromotionModal(promo => {
-            sendMove(from, to, promo);
-          });
-        } else {
-          sendMove(from, to);
+    function drawBoard(board) {
+      const boardDiv = document.getElementById('board');
+      boardDiv.innerHTML = '';
+      for (let y = 0; y < 8; y++) {
+        for (let x = 0; x < 8; x++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell ' + ((x + y) % 2 === 0 ? 'white' : 'black');
+          cell.textContent = board[y][x];
+          cell.dataset.x = x;
+          cell.dataset.y = y;
+          cell.onclick = () => cellClicked(x, y);
+          boardDiv.appendChild(cell);
         }
-
-        from = null;
       }
     }
 
-    function showPromotionModal(callback) {
-      promotionCallback = callback;
-      promotionModal.style.display = 'block';
-    }
-
-    function hidePromotionModal() {
-      promotionModal.style.display = 'none';
-    }
-
-    document.querySelectorAll('#promotionModal button').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const piece = btn.dataset.piece;
-        hidePromotionModal();
-        if (promotionCallback) promotionCallback(piece);
-      });
-    });
-
-    async function sendMove(from, to, promotion = null) {
-      const res = await fetch('/move', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from_square: from, to_square: to, promotion })
-      });
-
-      const data = await res.json();
-      if (data.error) {
-        alert(data.error);
+    async function cellClicked(x, y) {
+      if (!selected) {
+        selected = {x, y};
+        document.querySelectorAll('.cell').forEach(c => c.classList.remove('selected'));
+        document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`).classList.add('selected');
       } else {
-        drawBoard(data.fen);
-        fetchBoard();
+        const move = {
+          from_x: selected.x,
+          from_y: selected.y,
+          to_x: x,
+          to_y: y
+        };
+        await fetch('/move', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(move)
+        });
+        selected = null;
+        getBoard();
       }
     }
 
-    function showGameOverModal(message) {
-      document.getElementById('gameOverMessage').textContent = message;
-      document.getElementById('gameOverModal').style.display = 'block';
+    async function restart() {
+      await fetch('/restart', { method: 'POST' });
+      getBoard();
     }
 
-    async function restartGame() {
-      const res = await fetch('/restart', { method: 'POST' });
-      const data = await res.json();
-      drawBoard(data.fen);
-      document.getElementById('gameOverModal').style.display = 'none';
-      status.textContent = `Tour : ${data.turn}`;
-    }
-
-    fetchBoard();
+    getBoard();
   </script>
-
-  <div id="gameOverModal" style="display:none; position:fixed; top:30%; left:50%; transform:translate(-50%, -50%);
-       background:#222; color:white; padding:30px; border:3px solid white; border-radius:10px; text-align:center;">
-    <p id="gameOverMessage" style="font-size: 20px; margin-bottom: 15px;"></p>
-    <button onclick="restartGame()" style="padding:10px 20px; font-size:18px; background:#00aaff; color:white; border:none; border-radius:5px; cursor:pointer;">
-      Recommencer
-    </button>
-  </div>
 </body>
 </html>
-
 
 
