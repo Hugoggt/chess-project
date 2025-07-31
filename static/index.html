@@ -1,79 +1,193 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Python Chess</title>
+  <meta charset="UTF-8">
+  <title>Chess AI Game</title>
   <style>
-    body { display: flex; justify-content: center; align-items: center; height: 100vh; background: #ddd; }
-    #board { display: grid; grid-template-columns: repeat(8, 60px); grid-template-rows: repeat(8, 60px); }
-    .cell {
-      width: 60px; height: 60px; display: flex; justify-content: center; align-items: center;
-      font-size: 32px; font-weight: bold; cursor: pointer;
+    body {
+      font-family: Arial;
+      background: #f0f0f0;
+      text-align: center;
     }
-    .white { background: #f0d9b5; }
-    .black { background: #b58863; }
-    .selected { outline: 3px solid red; }
+    table {
+      border-collapse: collapse;
+      margin: 20px auto;
+    }
+    td {
+      width: 60px;
+      height: 60px;
+      text-align: center;
+      vertical-align: middle;
+      font-size: 36px;
+      cursor: pointer;
+    }
+    .light {
+      background-color: #f0d9b5;
+    }
+    .dark {
+      background-color: #b58863;
+    }
+    .highlight {
+      outline: 3px solid red;
+    }
+    #modal {
+      display: none;
+      position: fixed;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%, -30%);
+      padding: 20px;
+      background: white;
+      border: 2px solid black;
+    }
+    #promotion {
+      display: none;
+      position: fixed;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%, -30%);
+      padding: 20px;
+      background: white;
+      border: 2px solid black;
+    }
+    button {
+      padding: 10px 20px;
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
-  <div>
-    <div id="board"></div>
-    <button onclick="restart()">Restart</button>
+  <h1>Chess vs Random AI</h1>
+  <div id="board"></div>
+
+  <div id="modal">
+    <p id="resultText"></p>
+    <button onclick="restartGame()">Restart</button>
+  </div>
+
+  <div id="promotion">
+    <p>Promote to:</p>
+    <button onclick="promote('q')">Queen</button>
+    <button onclick="promote('r')">Rook</button>
+    <button onclick="promote('b')">Bishop</button>
+    <button onclick="promote('n')">Knight</button>
   </div>
 
   <script>
     let selected = null;
+    let currentBoard = {};
+    let pendingPromotion = null;
 
-    async function getBoard() {
-      const res = await fetch('/board');
-      const data = await res.json();
-      drawBoard(data.board);
+    const pieceMap = {
+      p: "♟", r: "♜", n: "♞", b: "♝", q: "♛", k: "♚",
+      P: "♙", R: "♖", N: "♘", B: "♗", Q: "♕", K: "♔"
+    };
+
+    async function fetchBoard() {
+      const res = await fetch("/board");
+      currentBoard = await res.json();
+      drawBoard();
+      checkEnd();
     }
 
-    function drawBoard(board) {
-      const boardDiv = document.getElementById('board');
-      boardDiv.innerHTML = '';
-      for (let y = 0; y < 8; y++) {
-        for (let x = 0; x < 8; x++) {
-          const cell = document.createElement('div');
-          cell.className = 'cell ' + ((x + y) % 2 === 0 ? 'white' : 'black');
-          cell.textContent = board[y][x];
-          cell.dataset.x = x;
-          cell.dataset.y = y;
-          cell.onclick = () => cellClicked(x, y);
-          boardDiv.appendChild(cell);
+    function drawBoard() {
+      const boardDiv = document.getElementById("board");
+      const rows = currentBoard.fen.split(" ")[0].split("/");
+      let html = "<table>";
+      for (let i = 0; i < 8; i++) {
+        html += "<tr>";
+        let row = rows[i];
+        let colIdx = 0;
+        for (let char of row) {
+          if (!isNaN(char)) {
+            for (let j = 0; j < +char; j++) {
+              const color = (i + colIdx) % 2 === 0 ? "light" : "dark";
+              html += `<td class="${color}" data-square="${"abcdefgh"[colIdx]}${8-i}"></td>`;
+              colIdx++;
+            }
+          } else {
+            const color = (i + colIdx) % 2 === 0 ? "light" : "dark";
+            const symbol = pieceMap[char] || char;
+            html += `<td class="${color}" data-square="${"abcdefgh"[colIdx]}${8-i}">${symbol}</td>`;
+            colIdx++;
+          }
         }
+        html += "</tr>";
       }
+      html += "</table>";
+      boardDiv.innerHTML = html;
+
+      document.querySelectorAll("td").forEach(td => {
+        td.onclick = () => handleClick(td.dataset.square);
+      });
     }
 
-    async function cellClicked(x, y) {
+    async function handleClick(square) {
       if (!selected) {
-        selected = {x, y};
-        document.querySelectorAll('.cell').forEach(c => c.classList.remove('selected'));
-        document.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`).classList.add('selected');
+        selected = square;
+        document.querySelector(`[data-square="${square}"]`).classList.add("highlight");
       } else {
-        const move = {
-          from_x: selected.x,
-          from_y: selected.y,
-          to_x: x,
-          to_y: y
-        };
-        await fetch('/move', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(move)
-        });
+        const from = selected;
+        const to = square;
         selected = null;
-        getBoard();
+        document.querySelectorAll("td").forEach(td => td.classList.remove("highlight"));
+
+        // Check if it's a promotion move
+        if (from[1] === "7" && to[1] === "8" && currentBoard.turn === "white" &&
+            document.querySelector(`[data-square="${from}"]`).textContent === "♙") {
+          pendingPromotion = { from, to };
+          document.getElementById("promotion").style.display = "block";
+          return;
+        }
+
+        if (from[1] === "2" && to[1] === "1" && currentBoard.turn === "black" &&
+            document.querySelector(`[data-square="${from}"]`).textContent === "♟") {
+          pendingPromotion = { from, to };
+          document.getElementById("promotion").style.display = "block";
+          return;
+        }
+
+        await sendMove(from, to);
+        await fetchBoard();
       }
     }
 
-    async function restart() {
-      await fetch('/restart', { method: 'POST' });
-      getBoard();
+    async function promote(piece) {
+      document.getElementById("promotion").style.display = "none";
+      if (pendingPromotion) {
+        await sendMove(pendingPromotion.from, pendingPromotion.to, piece);
+        pendingPromotion = null;
+        await fetchBoard();
+      }
     }
 
-    getBoard();
+    async function sendMove(from, to, promotion = null) {
+      await fetch("/move", {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from_square: from, to_square: to, promotion })
+      });
+    }
+
+    async function restartGame() {
+      document.getElementById("modal").style.display = "none";
+      await fetch("/restart", { method: "POST" });
+      await fetchBoard();
+    }
+
+    function checkEnd() {
+      if (currentBoard.is_checkmate || currentBoard.is_stalemate) {
+        document.getElementById("modal").style.display = "block";
+        document.getElementById("resultText").innerText =
+          currentBoard.is_stalemate ? "Stalemate!" : `Checkmate! ${currentBoard.winner} wins.`;
+      }
+    }
+
+    fetchBoard();
   </script>
+</body>
+</html>
+
 </body>
 </html>
 
