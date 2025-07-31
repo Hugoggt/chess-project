@@ -2,77 +2,108 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import List, Optional
-import random
+from typing import Optional
 import uvicorn
-
-import chess
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-board = chess.Board()
+
+# Piece classes and board logic
+class Piece:
+    def __init__(self, color):
+        self.color = color
+
+    def legal_moves(self, board, x, y):
+        return []
+
+class King(Piece):
+    def __str__(self): return "K" if self.color == "white" else "k"
+
+class Queen(Piece):
+    def __str__(self): return "Q" if self.color == "white" else "q"
+
+class Rook(Piece):
+    def __str__(self): return "R" if self.color == "white" else "r"
+
+class Bishop(Piece):
+    def __str__(self): return "B" if self.color == "white" else "b"
+
+class Knight(Piece):
+    def __str__(self): return "N" if self.color == "white" else "n"
+
+class Pawn(Piece):
+    def __str__(self): return "P" if self.color == "white" else "p"
+
+
+class Game:
+    def __init__(self):
+        self.reset_board()
+
+    def reset_board(self):
+        self.board = [[None for _ in range(8)] for _ in range(8)]
+        self.turn = "white"
+
+        # Setup pawns
+        for i in range(8):
+            self.board[1][i] = Pawn("black")
+            self.board[6][i] = Pawn("white")
+
+        # Setup other pieces
+        order = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
+        for i, cls in enumerate(order):
+            self.board[0][i] = cls("black")
+            self.board[7][i] = cls("white")
+
+    def get_board_state(self):
+        return [[str(piece) if piece else "" for piece in row] for row in self.board]
+
+    def move(self, fx, fy, tx, ty):
+        piece = self.board[fy][fx]
+        if not piece or piece.color != self.turn:
+            return False
+        self.board[ty][tx] = piece
+        self.board[fy][fx] = None
+        self.turn = "black" if self.turn == "white" else "white"
+        return True
+
+
+game = Game()
+
 
 class MoveRequest(BaseModel):
-    from_square: str  # like 'e7'
-    to_square: str    # like 'e8'
-    promotion: Optional[str] = None  # 'q', 'r', 'b', or 'n'
+    from_x: int
+    from_y: int
+    to_x: int
+    to_y: int
+
 
 @app.get("/", response_class=HTMLResponse)
-def get_index():
-    with open("static/index.html", "r", encoding="utf-8") as f:
+def index():
+    with open("static/index.html") as f:
         return f.read()
+
 
 @app.get("/board")
 def get_board():
-    board_state = {
-        "fen": board.fen(),
-        "turn": "white" if board.turn == chess.WHITE else "black",
-        "legal_moves": [move.uci() for move in board.legal_moves],
-        "is_check": board.is_check(),
-        "is_checkmate": board.is_checkmate(),
-        "is_stalemate": board.is_stalemate(),
-        "winner": None,
-        "is_game_over": board.is_game_over(),
-    }
-    if board.is_checkmate():
-        board_state["winner"] = "black" if board.turn == chess.WHITE else "white"
-    elif board.is_stalemate():
-        board_state["winner"] = "draw"
-    return board_state
+    return {"board": game.get_board_state(), "turn": game.turn}
+
 
 @app.post("/move")
-def play_move(move: MoveRequest):
-    if board.is_game_over():
-        return get_board()
+def make_move(move: MoveRequest):
+    success = game.move(move.from_x, move.from_y, move.to_x, move.to_y)
+    return {"success": success, "board": game.get_board_state(), "turn": game.turn}
 
-    move_uci = move.from_square + move.to_square
-    if move.promotion:
-        move_uci += move.promotion.lower()
-
-    try:
-        uci_move = chess.Move.from_uci(move_uci)
-        if uci_move in board.legal_moves:
-            board.push(uci_move)
-
-            # AI random move if game not over
-            if not board.is_game_over():
-                legal = list(board.legal_moves)
-                if legal:
-                    board.push(random.choice(legal))
-    except:
-        pass  # do nothing if move is invalid
-
-    return get_board()
 
 @app.post("/restart")
-def restart_game():
-    global board
-    board = chess.Board()
-    return get_board()
+def restart():
+    game.reset_board()
+    return {"board": game.get_board_state(), "turn": game.turn}
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
 
 
 
