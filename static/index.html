@@ -1,157 +1,220 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Chess Game</title>
   <style>
-    body { font-family: sans-serif; text-align: center; background-color: #f4f4f4; }
-    #board { display: grid; grid-template-columns: repeat(8, 60px); margin: 20px auto; }
-    .square { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 32px; cursor: pointer; }
-    .light { background-color: #eee; }
-    .dark { background-color: #888; color: white; }
-    #startBtn, #restartBtn { padding: 10px 20px; margin: 10px; font-size: 16px; }
-    #promotionDialog { display: none; position: fixed; top: 30%; left: 50%; transform: translateX(-50%); background: white; border: 2px solid black; padding: 20px; z-index: 10; }
-    #promotionDialog button { margin: 5px; font-size: 24px; }
-    #overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 5; }
+    body {
+      background-color: #1e1e1e;
+      color: white;
+      text-align: center;
+      font-family: Arial, sans-serif;
+    }
+    #board {
+      display: grid;
+      grid-template-columns: repeat(8, 60px);
+      grid-template-rows: repeat(8, 60px);
+      margin: 40px auto;
+    }
+    .square {
+      width: 60px;
+      height: 60px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 36px;
+      cursor: pointer;
+    }
+    .light {
+      background-color: #f0d9b5;
+    }
+    .dark {
+      background-color: #b58863;
+    }
+    #promotion-window {
+      display: none;
+      position: fixed;
+      top: 30%;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #333;
+      padding: 20px;
+      border-radius: 10px;
+    }
+    .promotion-option {
+      font-size: 32px;
+      margin: 10px;
+      cursor: pointer;
+    }
+    #start-screen {
+      margin-top: 100px;
+    }
+    #winner-popup {
+      display: none;
+      position: fixed;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%);
+      background: #444;
+      padding: 30px;
+      border-radius: 10px;
+    }
   </style>
 </head>
 <body>
-  <h1>Chess Game</h1>
-  <button id="startBtn">Start Game</button>
-  <div id="game">
-    <div id="board"></div>
-    <button id="restartBtn" style="display:none;">Restart</button>
-  </div>
 
-  <div id="overlay"></div>
-  <div id="promotionDialog">
-    <p>Choose promotion:</p>
-    <button data-piece="q">♛</button>
-    <button data-piece="r">♜</button>
-    <button data-piece="b">♝</button>
-    <button data-piece="n">♞</button>
-  </div>
+<div id="start-screen">
+  <button onclick="startGame()">Start Game</button>
+</div>
 
-  <script>
-    let gameId = null;
-    let fromSquare = null;
-    let promotionCallback = null;
+<div id="game-area" style="display:none;">
+  <div id="board"></div>
+</div>
 
-    document.getElementById("startBtn").onclick = async () => {
-      const res = await fetch("/start", { method: "POST" });
-      const data = await res.json();
-      gameId = data.game_id;
-      document.getElementById("startBtn").style.display = "none";
-      document.getElementById("restartBtn").style.display = "inline-block";
-      drawBoard();
-    };
+<div id="promotion-window">
+  <p>Choose a piece:</p>
+  <div id="promotion-options"></div>
+</div>
 
-    document.getElementById("restartBtn").onclick = async () => {
-      await fetch(`/restart/${gameId}`, { method: "POST" });
-      drawBoard();
-    };
+<div id="winner-popup">
+  <p id="winner-text"></p>
+  <button onclick="restart()">Restart</button>
+</div>
 
-    async function drawBoard() {
-      const res = await fetch(`/board/${gameId}`);
-      const data = await res.json();
-      const boardDiv = document.getElementById("board");
-      boardDiv.innerHTML = "";
-      const fenParts = data.fen.split(" ");
-      const boardState = fenParts[0].split("/");
-      boardState.forEach((row, rIdx) => {
-        let col = 0;
-        for (let char of row) {
-          if (isNaN(char)) {
-            const sq = document.createElement("div");
-            const file = "abcdefgh"[col];
-            const rank = 8 - rIdx;
-            sq.dataset.square = file + rank;
-            sq.textContent = pieceToSymbol(char);
-            sq.className = "square " + ((col + rIdx) % 2 === 0 ? "light" : "dark");
-            sq.onclick = () => handleClick(file + rank);
-            boardDiv.appendChild(sq);
-            col++;
-          } else {
-            col += parseInt(char);
-            for (let i = 0; i < parseInt(char); i++) {
-              const sq = document.createElement("div");
-              const file = "abcdefgh"[col - parseInt(char) + i];
-              const rank = 8 - rIdx;
-              sq.dataset.square = file + rank;
-              sq.className = "square " + ((col - parseInt(char) + i + rIdx) % 2 === 0 ? "light" : "dark");
-              sq.onclick = () => handleClick(file + rank);
-              boardDiv.appendChild(sq);
-            }
+<script>
+  let gameId = null;
+  let selected = null;
+  let boardEl = document.getElementById("board");
+  let promotionCallback = null;
+
+  const pieces = {
+    'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'p': '♟',
+    'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', 'P': '♙'
+  };
+
+  async function startGame() {
+    const res = await fetch("/start", { method: "POST" });
+    const data = await res.json();
+    gameId = data.game_id;
+    document.getElementById("start-screen").style.display = "none";
+    document.getElementById("game-area").style.display = "block";
+    loadBoard();
+  }
+
+  async function loadBoard() {
+    const res = await fetch(`/board/${gameId}`);
+    const data = await res.json();
+    const fen = data.fen.split(' ')[0];
+    const rows = fen.split('/');
+    boardEl.innerHTML = "";
+    let squares = [];
+
+    rows.forEach((row, r) => {
+      let file = 0;
+      [...row].forEach(ch => {
+        if (!isNaN(ch)) {
+          for (let i = 0; i < parseInt(ch); i++) {
+            squares.push(null);
+            file++;
           }
+        } else {
+          squares.push(ch);
+          file++;
         }
       });
-
-      if (data.is_game_over) {
-        const msg = data.is_checkmate ? `Checkmate! ${data.winner} wins.` : "Stalemate!";
-        setTimeout(() => {
-          if (confirm(msg + " Restart?")) {
-            document.getElementById("restartBtn").click();
-          }
-        }, 100);
-      }
-    }
-
-    function pieceToSymbol(p) {
-      const map = {
-        p: "♟", r: "♜", n: "♞", b: "♝", q: "♛", k: "♚",
-        P: "♙", R: "♖", N: "♘", B: "♗", Q: "♕", K: "♔"
-      };
-      return map[p] || "";
-    }
-
-    function handleClick(square) {
-      if (!fromSquare) {
-        fromSquare = square;
-      } else {
-        maybeMove(fromSquare, square);
-        fromSquare = null;
-      }
-    }
-
-    function maybeMove(from, to) {
-      const fromRank = parseInt(from[1]);
-      const toRank = parseInt(to[1]);
-      const isPromotion = (fromRank === 7 && toRank === 8) || (fromRank === 2 && toRank === 1);
-      if (isPromotion) {
-        showPromotionDialog(p => {
-          sendMove(from, to, p);
-        });
-      } else {
-        sendMove(from, to, null);
-      }
-    }
-
-    async function sendMove(from, to, promotion) {
-      await fetch("/move", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ game_id: gameId, from_square: from, to_square: to, promotion })
-      });
-      drawBoard();
-    }
-
-    function showPromotionDialog(callback) {
-      promotionCallback = callback;
-      document.getElementById("overlay").style.display = "block";
-      document.getElementById("promotionDialog").style.display = "block";
-    }
-
-    document.querySelectorAll("#promotionDialog button").forEach(btn => {
-      btn.onclick = () => {
-        const piece = btn.dataset.piece;
-        if (promotionCallback) promotionCallback(piece);
-        document.getElementById("overlay").style.display = "none";
-        document.getElementById("promotionDialog").style.display = "none";
-      };
     });
-  </script>
+
+    squares.forEach((piece, idx) => {
+      const square = document.createElement("div");
+      square.classList.add("square");
+      const rank = 7 - Math.floor(idx / 8);
+      const file = idx % 8;
+      square.classList.add((rank + file) % 2 === 0 ? "light" : "dark");
+      square.dataset.square = "abcdefgh"[file] + (rank + 1);
+      if (piece) square.textContent = pieces[piece];
+      square.onclick = () => onClickSquare(square.dataset.square);
+      boardEl.appendChild(square);
+    });
+
+    if (data.is_checkmate || data.is_stalemate) {
+      document.getElementById("winner-text").innerText =
+        data.is_checkmate ? `Checkmate! Winner: ${data.winner}` : "Stalemate!";
+      document.getElementById("winner-popup").style.display = "block";
+    }
+  }
+
+  function onClickSquare(square) {
+    if (promotionCallback) return;
+
+    if (!selected) {
+      selected = square;
+    } else {
+      const from = selected;
+      const to = square;
+      attemptMove(from, to);
+      selected = null;
+    }
+  }
+
+  async function attemptMove(from, to) {
+    const rank = parseInt(to[1]);
+    const promotionRank = to.endsWith("8") || to.endsWith("1");
+
+    if (promotionRank) {
+      // check if it's a pawn moving to last rank
+      const res = await fetch(`/board/${gameId}`);
+      const data = await res.json();
+      const boardFen = data.fen.split(' ')[0];
+      const index = (8 - parseInt(from[1])) * 8 + "abcdefgh".indexOf(from[0]);
+      const pieceChar = boardFen.replace(/\d/g, d => '0'.repeat(d)).replace(/\//g, '').charAt(index);
+
+      if (pieceChar === 'P' && to.endsWith("8") || pieceChar === 'p' && to.endsWith("1")) {
+        showPromotionMenu(from, to);
+        return;
+      }
+    }
+
+    await sendMove(from, to);
+  }
+
+  function showPromotionMenu(from, to) {
+    const options = ['q', 'r', 'b', 'n'];
+    const container = document.getElementById("promotion-options");
+    container.innerHTML = "";
+    options.forEach(opt => {
+      const div = document.createElement("div");
+      div.classList.add("promotion-option");
+      div.textContent = pieces[opt.toUpperCase()];
+      div.onclick = () => {
+        promotionCallback = null;
+        document.getElementById("promotion-window").style.display = "none";
+        sendMove(from, to, opt);
+      };
+      container.appendChild(div);
+    });
+    document.getElementById("promotion-window").style.display = "block";
+    promotionCallback = true;
+  }
+
+  async function sendMove(from, to, promotion = null) {
+    await fetch("/move", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ game_id: gameId, from_square: from, to_square: to, promotion })
+    });
+    loadBoard();
+  }
+
+  async function restart() {
+    await fetch(`/restart/${gameId}`, { method: "POST" });
+    document.getElementById("winner-popup").style.display = "none";
+    loadBoard();
+  }
+</script>
+
 </body>
 </html>
+
 
 
 
