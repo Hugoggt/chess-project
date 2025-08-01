@@ -43,6 +43,7 @@ def get_board(game_id: str):
         "is_stalemate": board.is_stalemate(),
         "winner": "black" if board.is_checkmate() and board.turn == chess.WHITE else "white" if board.is_checkmate() else None,
         "is_game_over": board.is_game_over(),
+        "promotion_rank": 6 if board.turn == chess.WHITE else 1
     }
 
 @app.post("/move")
