@@ -1,160 +1,158 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Chess</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            margin: 0;
-            background-color: #eee;
-        }
-        h1 {
-            margin-top: 20px;
-        }
-        table {
-            border-collapse: collapse;
-            margin: auto;
-        }
-        td {
-            width: 60px;
-            height: 60px;
-            font-size: 36px;
-            text-align: center;
-            vertical-align: middle;
-            cursor: pointer;
-        }
-        .light {
-            background-color: #f0d9b5;
-        }
-        .dark {
-            background-color: #b58863;
-        }
-        #restart-btn {
-            margin: 20px;
-            padding: 10px 20px;
-            font-size: 16px;
-            display: none;
-        }
-        #start-screen {
-            margin-top: 150px;
-        }
-        #game-container {
-            display: none;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Chess Game</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background-color: #f4f4f4; }
+    #board { display: grid; grid-template-columns: repeat(8, 60px); margin: 20px auto; }
+    .square { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 32px; cursor: pointer; }
+    .light { background-color: #eee; }
+    .dark { background-color: #888; color: white; }
+    #startBtn, #restartBtn { padding: 10px 20px; margin: 10px; font-size: 16px; }
+    #promotionDialog { display: none; position: fixed; top: 30%; left: 50%; transform: translateX(-50%); background: white; border: 2px solid black; padding: 20px; z-index: 10; }
+    #promotionDialog button { margin: 5px; font-size: 24px; }
+    #overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 5; }
+  </style>
 </head>
 <body>
-    <div id="start-screen">
-        <h1>Chess Game</h1>
-        <button id="start-game">Start Game</button>
-    </div>
+  <h1>Chess Game</h1>
+  <button id="startBtn">Start Game</button>
+  <div id="game">
+    <div id="board"></div>
+    <button id="restartBtn" style="display:none;">Restart</button>
+  </div>
 
-    <div id="game-container">
-        <h1 id="turn-text">Your Turn</h1>
-        <div id="board-container"></div>
-        <button id="restart-btn">Restart</button>
-    </div>
+  <div id="overlay"></div>
+  <div id="promotionDialog">
+    <p>Choose promotion:</p>
+    <button data-piece="q">♛</button>
+    <button data-piece="r">♜</button>
+    <button data-piece="b">♝</button>
+    <button data-piece="n">♞</button>
+  </div>
 
-    <script>
-        let gameId = null;
-        let selected = null;
+  <script>
+    let gameId = null;
+    let fromSquare = null;
+    let promotionCallback = null;
 
-        document.getElementById("start-game").onclick = async () => {
-            const res = await fetch("/start", { method: "POST" });
-            const data = await res.json();
-            gameId = data.game_id;
-            document.getElementById("start-screen").style.display = "none";
-            document.getElementById("game-container").style.display = "block";
-            loadBoard();
-        };
+    document.getElementById("startBtn").onclick = async () => {
+      const res = await fetch("/start", { method: "POST" });
+      const data = await res.json();
+      gameId = data.game_id;
+      document.getElementById("startBtn").style.display = "none";
+      document.getElementById("restartBtn").style.display = "inline-block";
+      drawBoard();
+    };
 
-        document.getElementById("restart-btn").onclick = async () => {
-            await fetch(`/restart/${gameId}`, { method: "POST" });
-            loadBoard();
-        };
+    document.getElementById("restartBtn").onclick = async () => {
+      await fetch(`/restart/${gameId}`, { method: "POST" });
+      drawBoard();
+    };
 
-        async function loadBoard() {
-            const res = await fetch(`/board/${gameId}`);
-            const data = await res.json();
-            const boardEl = document.getElementById("board-container");
-            boardEl.innerHTML = "";
-
-            const board = document.createElement("table");
-            const fen = data.fen.split(" ")[0];
-            const rows = fen.split("/");
-
-            rows.forEach((row, i) => {
-                const tr = document.createElement("tr");
-                let colIndex = 0;
-                for (const char of row) {
-                    const count = parseInt(char);
-                    if (isNaN(count)) {
-                        const td = document.createElement("td");
-                        td.className = (i + colIndex) % 2 === 0 ? "light" : "dark";
-                        td.textContent = char;
-                        const file = String.fromCharCode("a".charCodeAt(0) + colIndex);
-                        const rank = 8 - i;
-                        const square = file + rank;
-                        td.dataset.square = square;
-                        td.onclick = () => handleClick(square);
-                        tr.appendChild(td);
-                        colIndex++;
-                    } else {
-                        for (let k = 0; k < count; k++) {
-                            const td = document.createElement("td");
-                            td.className = (i + colIndex) % 2 === 0 ? "light" : "dark";
-                            const file = String.fromCharCode("a".charCodeAt(0) + colIndex);
-                            const rank = 8 - i;
-                            const square = file + rank;
-                            td.dataset.square = square;
-                            td.onclick = () => handleClick(square);
-                            tr.appendChild(td);
-                            colIndex++;
-                        }
-                    }
-                }
-                board.appendChild(tr);
-            });
-
-            boardEl.appendChild(board);
-
-            if (data.is_game_over) {
-                let msg = "Game Over!";
-                if (data.is_checkmate) msg = `Checkmate! ${data.winner} wins.`;
-                else if (data.is_stalemate) msg = "Stalemate!";
-                setTimeout(() => {
-                    alert(msg);
-                    document.getElementById("restart-btn").style.display = "inline-block";
-                }, 100);
-            } else {
-                document.getElementById("restart-btn").style.display = "none";
+    async function drawBoard() {
+      const res = await fetch(`/board/${gameId}`);
+      const data = await res.json();
+      const boardDiv = document.getElementById("board");
+      boardDiv.innerHTML = "";
+      const fenParts = data.fen.split(" ");
+      const boardState = fenParts[0].split("/");
+      boardState.forEach((row, rIdx) => {
+        let col = 0;
+        for (let char of row) {
+          if (isNaN(char)) {
+            const sq = document.createElement("div");
+            const file = "abcdefgh"[col];
+            const rank = 8 - rIdx;
+            sq.dataset.square = file + rank;
+            sq.textContent = pieceToSymbol(char);
+            sq.className = "square " + ((col + rIdx) % 2 === 0 ? "light" : "dark");
+            sq.onclick = () => handleClick(file + rank);
+            boardDiv.appendChild(sq);
+            col++;
+          } else {
+            col += parseInt(char);
+            for (let i = 0; i < parseInt(char); i++) {
+              const sq = document.createElement("div");
+              const file = "abcdefgh"[col - parseInt(char) + i];
+              const rank = 8 - rIdx;
+              sq.dataset.square = file + rank;
+              sq.className = "square " + ((col - parseInt(char) + i + rIdx) % 2 === 0 ? "light" : "dark");
+              sq.onclick = () => handleClick(file + rank);
+              boardDiv.appendChild(sq);
             }
-
-            document.getElementById("turn-text").textContent = `Turn: ${data.turn}`;
+          }
         }
+      });
 
-        async function handleClick(square) {
-            if (!selected) {
-                selected = square;
-            } else {
-                const res = await fetch("/move", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        game_id: gameId,
-                        from_square: selected,
-                        to_square: square
-                    })
-                });
-                selected = null;
-                const result = await res.json();
-                loadBoard();
-            }
-        }
-    </script>
+      if (data.is_game_over) {
+        const msg = data.is_checkmate ? `Checkmate! ${data.winner} wins.` : "Stalemate!";
+        setTimeout(() => {
+          if (confirm(msg + " Restart?")) {
+            document.getElementById("restartBtn").click();
+          }
+        }, 100);
+      }
+    }
+
+    function pieceToSymbol(p) {
+      const map = {
+        p: "♟", r: "♜", n: "♞", b: "♝", q: "♛", k: "♚",
+        P: "♙", R: "♖", N: "♘", B: "♗", Q: "♕", K: "♔"
+      };
+      return map[p] || "";
+    }
+
+    function handleClick(square) {
+      if (!fromSquare) {
+        fromSquare = square;
+      } else {
+        maybeMove(fromSquare, square);
+        fromSquare = null;
+      }
+    }
+
+    function maybeMove(from, to) {
+      const fromRank = parseInt(from[1]);
+      const toRank = parseInt(to[1]);
+      const isPromotion = (fromRank === 7 && toRank === 8) || (fromRank === 2 && toRank === 1);
+      if (isPromotion) {
+        showPromotionDialog(p => {
+          sendMove(from, to, p);
+        });
+      } else {
+        sendMove(from, to, null);
+      }
+    }
+
+    async function sendMove(from, to, promotion) {
+      await fetch("/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ game_id: gameId, from_square: from, to_square: to, promotion })
+      });
+      drawBoard();
+    }
+
+    function showPromotionDialog(callback) {
+      promotionCallback = callback;
+      document.getElementById("overlay").style.display = "block";
+      document.getElementById("promotionDialog").style.display = "block";
+    }
+
+    document.querySelectorAll("#promotionDialog button").forEach(btn => {
+      btn.onclick = () => {
+        const piece = btn.dataset.piece;
+        if (promotionCallback) promotionCallback(piece);
+        document.getElementById("overlay").style.display = "none";
+        document.getElementById("promotionDialog").style.display = "none";
+      };
+    });
+  </script>
 </body>
 </html>
+
 
 
 </body>
