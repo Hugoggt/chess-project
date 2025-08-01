@@ -1,40 +1,70 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Chess Game</title>
+    <title>Chess</title>
     <style>
-        body { font-family: sans-serif; text-align: center; }
-        table { border-collapse: collapse; margin: auto; }
-        td {
-            width: 60px; height: 60px;
-            text-align: center; vertical-align: middle;
-            font-size: 36px; cursor: pointer;
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            background-color: #eee;
         }
-        .light { background-color: #f0d9b5; }
-        .dark  { background-color: #b58863; }
-        #restart-btn { margin-top: 20px; padding: 10px; display: none; }
-        #start-btn { margin-top: 100px; padding: 20px; font-size: 20px; }
+        h1 {
+            margin-top: 20px;
+        }
+        table {
+            border-collapse: collapse;
+            margin: auto;
+        }
+        td {
+            width: 60px;
+            height: 60px;
+            font-size: 36px;
+            text-align: center;
+            vertical-align: middle;
+            cursor: pointer;
+        }
+        .light {
+            background-color: #f0d9b5;
+        }
+        .dark {
+            background-color: #b58863;
+        }
+        #restart-btn {
+            margin: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            display: none;
+        }
+        #start-screen {
+            margin-top: 150px;
+        }
+        #game-container {
+            display: none;
+        }
     </style>
 </head>
 <body>
-    <h1>Chess</h1>
-    <div id="start-menu">
-        <button id="start-btn">Start Game</button>
+    <div id="start-screen">
+        <h1>Chess Game</h1>
+        <button id="start-game">Start Game</button>
     </div>
-    <div id="game-container" style="display:none;">
-        <div id="board"></div>
-        <button id="restart-btn">Restart Game</button>
+
+    <div id="game-container">
+        <h1 id="turn-text">Your Turn</h1>
+        <div id="board-container"></div>
+        <button id="restart-btn">Restart</button>
     </div>
 
     <script>
         let gameId = null;
         let selected = null;
 
-        document.getElementById("start-btn").onclick = async () => {
+        document.getElementById("start-game").onclick = async () => {
             const res = await fetch("/start", { method: "POST" });
             const data = await res.json();
             gameId = data.game_id;
-            document.getElementById("start-menu").style.display = "none";
+            document.getElementById("start-screen").style.display = "none";
             document.getElementById("game-container").style.display = "block";
             loadBoard();
         };
@@ -47,65 +77,85 @@
         async function loadBoard() {
             const res = await fetch(`/board/${gameId}`);
             const data = await res.json();
-            const boardEl = document.getElementById("board");
+            const boardEl = document.getElementById("board-container");
             boardEl.innerHTML = "";
-            const rows = data.fen.split(" ")[0].split("/");
+
+            const board = document.createElement("table");
+            const fen = data.fen.split(" ")[0];
+            const rows = fen.split("/");
+
             rows.forEach((row, i) => {
                 const tr = document.createElement("tr");
                 let colIndex = 0;
-                [...row].forEach(ch => {
-                    let count = isNaN(ch) ? 1 : parseInt(ch);
-                    for (let k = 0; k < count; k++) {
+                for (const char of row) {
+                    const count = parseInt(char);
+                    if (isNaN(count)) {
                         const td = document.createElement("td");
-                        const color = (i + colIndex) % 2 === 0 ? "light" : "dark";
-                        td.className = color;
-                        if (!isNaN(ch)) {
-                            td.textContent = "";
-                        } else {
-                            td.textContent = ch;
-                        }
-                        const rank = 8 - i;
+                        td.className = (i + colIndex) % 2 === 0 ? "light" : "dark";
+                        td.textContent = char;
                         const file = String.fromCharCode("a".charCodeAt(0) + colIndex);
-                        td.dataset.square = file + rank;
-                        td.onclick = () => handleClick(file + rank);
+                        const rank = 8 - i;
+                        const square = file + rank;
+                        td.dataset.square = square;
+                        td.onclick = () => handleClick(square);
                         tr.appendChild(td);
                         colIndex++;
+                    } else {
+                        for (let k = 0; k < count; k++) {
+                            const td = document.createElement("td");
+                            td.className = (i + colIndex) % 2 === 0 ? "light" : "dark";
+                            const file = String.fromCharCode("a".charCodeAt(0) + colIndex);
+                            const rank = 8 - i;
+                            const square = file + rank;
+                            td.dataset.square = square;
+                            td.onclick = () => handleClick(square);
+                            tr.appendChild(td);
+                            colIndex++;
+                        }
                     }
-                });
-                boardEl.appendChild(tr);
+                }
+                board.appendChild(tr);
             });
 
+            boardEl.appendChild(board);
+
             if (data.is_game_over) {
-                let msg = data.is_checkmate ? `Checkmate! ${data.winner} wins.` :
-                          data.is_stalemate ? "Stalemate!" : "Game over!";
-                alert(msg);
-                document.getElementById("restart-btn").style.display = "inline-block";
+                let msg = "Game Over!";
+                if (data.is_checkmate) msg = `Checkmate! ${data.winner} wins.`;
+                else if (data.is_stalemate) msg = "Stalemate!";
+                setTimeout(() => {
+                    alert(msg);
+                    document.getElementById("restart-btn").style.display = "inline-block";
+                }, 100);
             } else {
                 document.getElementById("restart-btn").style.display = "none";
             }
+
+            document.getElementById("turn-text").textContent = `Turn: ${data.turn}`;
         }
 
         async function handleClick(square) {
             if (!selected) {
                 selected = square;
             } else {
-                const move = {
-                    game_id: gameId,
-                    from_square: selected,
-                    to_square: square
-                };
-                selected = null;
-                await fetch("/move", {
+                const res = await fetch("/move", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(move)
+                    body: JSON.stringify({
+                        game_id: gameId,
+                        from_square: selected,
+                        to_square: square
+                    })
                 });
+                selected = null;
+                const result = await res.json();
                 loadBoard();
             }
         }
     </script>
 </body>
 </html>
+
 
 </body>
 </html>
