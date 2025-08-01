@@ -15,6 +15,10 @@
       grid-template-columns: repeat(8, 60px);
       grid-template-rows: repeat(8, 60px);
       margin: 40px auto;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
     }
     .square {
       width: 60px;
@@ -26,10 +30,10 @@
       cursor: pointer;
     }
     .light {
-      background-color: #f0d9b5;
+      background-color: #fff;
     }
     .dark {
-      background-color: #b58863;
+      background-color: #444;
     }
     #promotion-window {
       display: none;
@@ -129,7 +133,12 @@
       square.classList.add("square");
       const rank = 7 - Math.floor(idx / 8);
       const file = idx % 8;
-      square.classList.add((rank + file) % 2 === 0 ? "light" : "dark");
+      if (piece) {
+        square.textContent = pieces[piece];
+        square.style.color = (piece === piece.toUpperCase()) ? "white" : "black";
+      } else {
+        square.textContent = ""; // Keep square empty, but colored
+      }      
       square.dataset.square = "abcdefgh"[file] + (rank + 1);
       if (piece) square.textContent = pieces[piece];
       square.onclick = () => onClickSquare(square.dataset.square);
