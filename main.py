@@ -52,21 +52,26 @@ def play_move(move: MoveRequest):
         return get_board(move.game_id)
 
     move_uci = move.from_square + move.to_square
-    # Determine if this is a promotion move (to the 8th or 1st rank for pawns)
-    from_rank = int(move.from_square[1])
-    to_rank = int(move.to_square[1])
-    if move.promotion and ((from_rank == 7 and to_rank == 8) or (from_rank == 2 and to_rank == 1)):
-        move_uci += move.promotion.lower()
+    from_sq = chess.parse_square(move.from_square)
+    to_sq = chess.parse_square(move.to_square)
+    piece = board.piece_at(from_sq)
+
+    # Handle promotion properly
+    if piece and piece.piece_type == chess.PAWN and (chess.square_rank(to_sq) == 0 or chess.square_rank(to_sq) == 7):
+        if move.promotion:
+            move_uci += move.promotion.lower()
+        else:
+            return {"error": "Promotion required"}
 
     try:
         uci_move = chess.Move.from_uci(move_uci)
         if uci_move in board.legal_moves:
             board.push(uci_move)
-            # Optional AI move after user
-            # if not board.is_game_over():
-            #     legal_moves = list(board.legal_moves)
-            #     if legal_moves:
-            #         board.push(random.choice(legal_moves))
+            # AI move
+            if not board.is_game_over():
+                legal_moves = list(board.legal_moves)
+                if legal_moves:
+                    board.push(random.choice(legal_moves))
     except:
         pass
 
@@ -79,7 +84,6 @@ def restart_game(game_id: str):
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-
 
 
 
