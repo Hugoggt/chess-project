@@ -130,20 +130,28 @@
 
     squares.forEach((piece, idx) => {
       const square = document.createElement("div");
-      square.classList.add("square");
+      
       const rank = 7 - Math.floor(idx / 8);
       const file = idx % 8;
+      
+      // Assign color class based on position
+      const isLight = (rank + file) % 2 === 0;
+      square.className = "square " + (isLight ? "light" : "dark");
+      
+      // Add piece text if present
       if (piece) {
         square.textContent = pieces[piece];
         square.style.color = (piece === piece.toUpperCase()) ? "white" : "black";
       } else {
-        square.textContent = ""; // Keep square empty, but colored
-      }      
+        square.textContent = ""; // Keep square empty, but show square color
+      }
+    
       square.dataset.square = "abcdefgh"[file] + (rank + 1);
-      if (piece) square.textContent = pieces[piece];
       square.onclick = () => onClickSquare(square.dataset.square);
+    
       boardEl.appendChild(square);
     });
+
 
     if (data.is_checkmate || data.is_stalemate) {
       document.getElementById("winner-text").innerText =
