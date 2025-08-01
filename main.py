@@ -2,29 +2,39 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict
 import random
 import uvicorn
-
+import uuid
 import chess
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-board = chess.Board()
+games: Dict[str, chess.Board] = {}
 
 class MoveRequest(BaseModel):
-    from_square: str  # like 'e2'
-    to_square: str    # like 'e4'
-    promotion: Optional[str] = None  # 'q', 'r', 'b', or 'n'
+    game_id: str
+    from_square: str
+    to_square: str
+    promotion: Optional[str] = None
 
 @app.get("/", response_class=HTMLResponse)
 def get_index():
     with open("static/index.html", "r", encoding="utf-8") as f:
         return f.read()
 
-@app.get("/board")
-def get_board():
+@app.post("/start")
+def start_game():
+    game_id = str(uuid.uuid4())
+    games[game_id] = chess.Board()
+    return {"game_id": game_id}
+
+@app.get("/board/{game_id}")
+def get_board(game_id: str):
+    board = games.get(game_id)
+    if not board:
+        return {"error": "Game not found"}
     return {
         "fen": board.fen(),
         "turn": "white" if board.turn == chess.WHITE else "black",
@@ -37,8 +47,9 @@ def get_board():
 
 @app.post("/move")
 def play_move(move: MoveRequest):
-    if board.is_game_over():
-        return get_board()
+    board = games.get(move.game_id)
+    if not board or board.is_game_over():
+        return get_board(move.game_id)
 
     move_uci = move.from_square + move.to_square
     if move.promotion:
@@ -53,19 +64,17 @@ def play_move(move: MoveRequest):
                 if legal_moves:
                     board.push(random.choice(legal_moves))
     except:
-        pass  # ignore illegal or invalid moves
+        pass
 
-    return get_board()
+    return get_board(move.game_id)
 
-@app.post("/restart")
-def restart_game():
-    global board
-    board = chess.Board()
-    return get_board()
+@app.post("/restart/{game_id}")
+def restart_game(game_id: str):
+    games[game_id] = chess.Board()
+    return get_board(game_id)
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-
 
 
 
