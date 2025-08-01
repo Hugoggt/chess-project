@@ -1,190 +1,109 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Chess AI Game</title>
-  <style>
-    body {
-      font-family: Arial;
-      background: #f0f0f0;
-      text-align: center;
-    }
-    table {
-      border-collapse: collapse;
-      margin: 20px auto;
-    }
-    td {
-      width: 60px;
-      height: 60px;
-      text-align: center;
-      vertical-align: middle;
-      font-size: 36px;
-      cursor: pointer;
-    }
-    .light {
-      background-color: #f0d9b5;
-    }
-    .dark {
-      background-color: #b58863;
-    }
-    .highlight {
-      outline: 3px solid red;
-    }
-    #modal {
-      display: none;
-      position: fixed;
-      top: 30%;
-      left: 50%;
-      transform: translate(-50%, -30%);
-      padding: 20px;
-      background: white;
-      border: 2px solid black;
-    }
-    #promotion {
-      display: none;
-      position: fixed;
-      top: 30%;
-      left: 50%;
-      transform: translate(-50%, -30%);
-      padding: 20px;
-      background: white;
-      border: 2px solid black;
-    }
-    button {
-      padding: 10px 20px;
-      margin-top: 10px;
-    }
-  </style>
+    <title>Chess Game</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; }
+        table { border-collapse: collapse; margin: auto; }
+        td {
+            width: 60px; height: 60px;
+            text-align: center; vertical-align: middle;
+            font-size: 36px; cursor: pointer;
+        }
+        .light { background-color: #f0d9b5; }
+        .dark  { background-color: #b58863; }
+        #restart-btn { margin-top: 20px; padding: 10px; display: none; }
+        #start-btn { margin-top: 100px; padding: 20px; font-size: 20px; }
+    </style>
 </head>
 <body>
-  <h1>Chess vs Random AI</h1>
-  <div id="board"></div>
+    <h1>Chess</h1>
+    <div id="start-menu">
+        <button id="start-btn">Start Game</button>
+    </div>
+    <div id="game-container" style="display:none;">
+        <div id="board"></div>
+        <button id="restart-btn">Restart Game</button>
+    </div>
 
-  <div id="modal">
-    <p id="resultText"></p>
-    <button onclick="restartGame()">Restart</button>
-  </div>
+    <script>
+        let gameId = null;
+        let selected = null;
 
-  <div id="promotion">
-    <p>Promote to:</p>
-    <button onclick="promote('q')">Queen</button>
-    <button onclick="promote('r')">Rook</button>
-    <button onclick="promote('b')">Bishop</button>
-    <button onclick="promote('n')">Knight</button>
-  </div>
+        document.getElementById("start-btn").onclick = async () => {
+            const res = await fetch("/start", { method: "POST" });
+            const data = await res.json();
+            gameId = data.game_id;
+            document.getElementById("start-menu").style.display = "none";
+            document.getElementById("game-container").style.display = "block";
+            loadBoard();
+        };
 
-  <script>
-    let selected = null;
-    let currentBoard = {};
-    let pendingPromotion = null;
+        document.getElementById("restart-btn").onclick = async () => {
+            await fetch(`/restart/${gameId}`, { method: "POST" });
+            loadBoard();
+        };
 
-    const pieceMap = {
-      p: "♟", r: "♜", n: "♞", b: "♝", q: "♛", k: "♚",
-      P: "♙", R: "♖", N: "♘", B: "♗", Q: "♕", K: "♔"
-    };
+        async function loadBoard() {
+            const res = await fetch(`/board/${gameId}`);
+            const data = await res.json();
+            const boardEl = document.getElementById("board");
+            boardEl.innerHTML = "";
+            const rows = data.fen.split(" ")[0].split("/");
+            rows.forEach((row, i) => {
+                const tr = document.createElement("tr");
+                let colIndex = 0;
+                [...row].forEach(ch => {
+                    let count = isNaN(ch) ? 1 : parseInt(ch);
+                    for (let k = 0; k < count; k++) {
+                        const td = document.createElement("td");
+                        const color = (i + colIndex) % 2 === 0 ? "light" : "dark";
+                        td.className = color;
+                        if (!isNaN(ch)) {
+                            td.textContent = "";
+                        } else {
+                            td.textContent = ch;
+                        }
+                        const rank = 8 - i;
+                        const file = String.fromCharCode("a".charCodeAt(0) + colIndex);
+                        td.dataset.square = file + rank;
+                        td.onclick = () => handleClick(file + rank);
+                        tr.appendChild(td);
+                        colIndex++;
+                    }
+                });
+                boardEl.appendChild(tr);
+            });
 
-    async function fetchBoard() {
-      const res = await fetch("/board");
-      currentBoard = await res.json();
-      drawBoard();
-      checkEnd();
-    }
-
-    function drawBoard() {
-      const boardDiv = document.getElementById("board");
-      const rows = currentBoard.fen.split(" ")[0].split("/");
-      let html = "<table>";
-      for (let i = 0; i < 8; i++) {
-        html += "<tr>";
-        let row = rows[i];
-        let colIdx = 0;
-        for (let char of row) {
-          if (!isNaN(char)) {
-            for (let j = 0; j < +char; j++) {
-              const color = (i + colIdx) % 2 === 0 ? "light" : "dark";
-              html += `<td class="${color}" data-square="${"abcdefgh"[colIdx]}${8-i}"></td>`;
-              colIdx++;
+            if (data.is_game_over) {
+                let msg = data.is_checkmate ? `Checkmate! ${data.winner} wins.` :
+                          data.is_stalemate ? "Stalemate!" : "Game over!";
+                alert(msg);
+                document.getElementById("restart-btn").style.display = "inline-block";
+            } else {
+                document.getElementById("restart-btn").style.display = "none";
             }
-          } else {
-            const color = (i + colIdx) % 2 === 0 ? "light" : "dark";
-            const symbol = pieceMap[char] || char;
-            html += `<td class="${color}" data-square="${"abcdefgh"[colIdx]}${8-i}">${symbol}</td>`;
-            colIdx++;
-          }
-        }
-        html += "</tr>";
-      }
-      html += "</table>";
-      boardDiv.innerHTML = html;
-
-      document.querySelectorAll("td").forEach(td => {
-        td.onclick = () => handleClick(td.dataset.square);
-      });
-    }
-
-    async function handleClick(square) {
-      if (!selected) {
-        selected = square;
-        document.querySelector(`[data-square="${square}"]`).classList.add("highlight");
-      } else {
-        const from = selected;
-        const to = square;
-        selected = null;
-        document.querySelectorAll("td").forEach(td => td.classList.remove("highlight"));
-
-        // Check if it's a promotion move
-        if (from[1] === "7" && to[1] === "8" && currentBoard.turn === "white" &&
-            document.querySelector(`[data-square="${from}"]`).textContent === "♙") {
-          pendingPromotion = { from, to };
-          document.getElementById("promotion").style.display = "block";
-          return;
         }
 
-        if (from[1] === "2" && to[1] === "1" && currentBoard.turn === "black" &&
-            document.querySelector(`[data-square="${from}"]`).textContent === "♟") {
-          pendingPromotion = { from, to };
-          document.getElementById("promotion").style.display = "block";
-          return;
+        async function handleClick(square) {
+            if (!selected) {
+                selected = square;
+            } else {
+                const move = {
+                    game_id: gameId,
+                    from_square: selected,
+                    to_square: square
+                };
+                selected = null;
+                await fetch("/move", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(move)
+                });
+                loadBoard();
+            }
         }
-
-        await sendMove(from, to);
-        await fetchBoard();
-      }
-    }
-
-    async function promote(piece) {
-      document.getElementById("promotion").style.display = "none";
-      if (pendingPromotion) {
-        await sendMove(pendingPromotion.from, pendingPromotion.to, piece);
-        pendingPromotion = null;
-        await fetchBoard();
-      }
-    }
-
-    async function sendMove(from, to, promotion = null) {
-      await fetch("/move", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from_square: from, to_square: to, promotion })
-      });
-    }
-
-    async function restartGame() {
-      document.getElementById("modal").style.display = "none";
-      await fetch("/restart", { method: "POST" });
-      await fetchBoard();
-    }
-
-    function checkEnd() {
-      if (currentBoard.is_checkmate || currentBoard.is_stalemate) {
-        document.getElementById("modal").style.display = "block";
-        document.getElementById("resultText").innerText =
-          currentBoard.is_stalemate ? "Stalemate!" : `Checkmate! ${currentBoard.winner} wins.`;
-      }
-    }
-
-    fetchBoard();
-  </script>
+    </script>
 </body>
 </html>
 
