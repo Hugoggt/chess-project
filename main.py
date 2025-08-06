@@ -97,7 +97,9 @@ def play_move(move: MoveRequest):
 
     # Save game if it's over
     if board.is_game_over():
+        print("a")
         save_game_to_file(move.game_id, game)
+        print("a")
 
     return get_board(move.game_id)
 
