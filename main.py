@@ -6,56 +6,27 @@ from typing import Optional
 import random
 import uvicorn
 import chess
-import os
 import requests
-from datetime import datetime
-
-# === CONFIGURE THESE ===
-GITHUB_TOKEN = "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"
-REPO_NAME = "Hugoggt/chess-project"
+import json
+import datetime
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 board = chess.Board()
 
+# Store all moves in UCI format for saving later
+game_moves = []
+
+# --- ADD YOUR GITHUB INFO HERE ---
+GITHUB_TOKEN = "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"
+REPO_NAME = "Hugoggt/chess-project"
+BRANCH = "main"  # or your default branch
+
 class MoveRequest(BaseModel):
     from_square: str  # like 'e2'
     to_square: str    # like 'e4'
     promotion: Optional[str] = None  # 'q', 'r', 'b', or 'n'
-
-def save_game_to_github():
-    """Save finished game to GitHub under saved_games/ folder."""
-    result = None
-    if board.is_checkmate():
-        result = "White wins" if board.turn == chess.BLACK else "Black wins"
-    elif board.is_stalemate() or board.is_insufficient_material() or board.is_seventyfive_moves() or board.is_fivefold_repetition():
-        result = "Draw"
-
-    if not result:
-        return
-
-    scenario = board.fen()
-    timestamp = datetime.utcnow().strftime("%Y-%m-%d_%H-%M-%S")
-    filename = f"saved_games/game_{timestamp}.txt"
-    content = f"Result: {result}\nFEN: {scenario}\n\nPGN:\n{board.board_fen()}"
-
-    # Create the file in the repo
-    url = f"https://api.github.com/repos/{REPO_NAME}/contents/{filename}"
-    data = {
-        "message": f"Save finished game {timestamp}",
-        "content": content.encode("utf-8").decode("utf-8"),  # temporarily keep text
-    }
-
-    # GitHub API expects Base64 encoding for "content"
-    import base64
-    data["content"] = base64.b64encode(content.encode("utf-8")).decode("utf-8")
-
-    headers = {"Authorization": f"token {GITHUB_TOKEN}"}
-    r = requests.put(url, json=data, headers=headers)
-
-    if r.status_code not in (200, 201):
-        print("Failed to save game to GitHub:", r.text)
 
 @app.get("/", response_class=HTMLResponse)
 def get_index():
@@ -74,8 +45,56 @@ def get_board():
         "is_game_over": board.is_game_over(),
     }
 
+def save_game_to_github(moves_list, outcome):
+    # Compose filename with timestamp
+    now_str = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"saved_games/game_{now_str}.json"
+
+    # Compose game data to save
+    data = {
+        "moves": moves_list,
+        "outcome": outcome,
+        "timestamp_utc": now_str,
+    }
+
+    # GitHub API URL to create/update a file
+    url = f"https://api.github.com/repos/{REPO_NAME}/contents/{filename}"
+
+    # First, get the SHA if the file exists (to update)
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json",
+    }
+    get_resp = requests.get(url, headers=headers)
+    sha = None
+    if get_resp.status_code == 200:
+        sha = get_resp.json().get("sha")
+
+    # Prepare commit message and content
+    content_str = json.dumps(data, indent=2)
+    content_bytes = content_str.encode("utf-8")
+    import base64
+    content_b64 = base64.b64encode(content_bytes).decode("utf-8")
+
+    payload = {
+        "message": f"Save finished chess game at {now_str}",
+        "content": content_b64,
+        "branch": BRANCH,
+    }
+    if sha:
+        payload["sha"] = sha
+
+    resp = requests.put(url, headers=headers, json=payload)
+
+    if resp.status_code in [200, 201]:
+        print(f"Game saved to GitHub in {filename}")
+    else:
+        print(f"Failed to save game to GitHub: {resp.status_code} {resp.text}")
+
 @app.post("/move")
 def play_move(move: MoveRequest):
+    global game_moves
+
     if board.is_game_over():
         return get_board()
 
@@ -87,22 +106,44 @@ def play_move(move: MoveRequest):
         uci_move = chess.Move.from_uci(move_uci)
         if uci_move in board.legal_moves:
             board.push(uci_move)
+            game_moves.append(uci_move.uci())
+
             if not board.is_game_over():
                 legal_moves = list(board.legal_moves)
                 if legal_moves:
-                    board.push(random.choice(legal_moves))
+                    comp_move = random.choice(legal_moves)
+                    board.push(comp_move)
+                    game_moves.append(comp_move.uci())
+
+            # If game just ended, save the full game
+            if board.is_game_over():
+                # Determine outcome string
+                if board.is_checkmate():
+                    winner = "black" if board.turn == chess.WHITE else "white"
+                    outcome = f"{winner} wins by checkmate"
+                elif board.is_stalemate():
+                    outcome = "Draw by stalemate"
+                elif board.is_insufficient_material():
+                    outcome = "Draw by insufficient material"
+                elif board.can_claim_threefold_repetition():
+                    outcome = "Draw by threefold repetition"
+                else:
+                    outcome = "Game over"
+
+                save_game_to_github(game_moves, outcome)
+                # Reset game_moves for next game
+                game_moves = []
+
     except:
         pass  # ignore illegal or invalid moves
-
-    if board.is_game_over():
-        save_game_to_github()
 
     return get_board()
 
 @app.post("/restart")
 def restart_game():
-    global board
+    global board, game_moves
     board = chess.Board()
+    game_moves = []
     return get_board()
 
 if __name__ == "__main__":
