@@ -1,134 +1,121 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-from typing import Optional, Dict
-import random
-import uvicorn
-import uuid
+import os
+import json
+import requests
 import chess
 import chess.pgn
-import os
+from flask import Flask, render_template, request, jsonify
+from datetime import datetime
 from io import StringIO
 
-app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app = Flask(__name__)
 
-# Ensure directory for saving games exists
-os.makedirs("saved_games", exist_ok=True)
+# Your GitHub configuration
+GITHUB_REPO = "Hugoggt/chess-project"  # <-- change to your repo
+GITHUB_BRANCH = "main"  # or "master"
+GITHUB_TOKEN = os.getenv("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")  # Make sure your Render env variable matches
+SAVE_FOLDER = "saved_games"  # must exist in your repo
 
-# Game storage
-games: Dict[str, chess.Board] = {}
-game_history: Dict[str, chess.pgn.Game] = {}
+# Chess game state
+games = {}  # game_id -> {"board": chess.Board(), "history": []}
 
-class MoveRequest(BaseModel):
-    game_id: str
-    from_square: str
-    to_square: str
-    promotion: Optional[str] = None
+def save_game_to_github(game_id, game):
+    """
+    Save the game PGN to GitHub under saved_games folder
+    """
+    # Prepare PGN from history
+    pgn_io = StringIO()
+    chess_game = chess.pgn.Game()
+    node = chess_game
 
-@app.get("/", response_class=HTMLResponse)
-def get_index():
-    with open("static/index.html", "r", encoding="utf-8") as f:
-        return f.read()
+    for move_uci in game["history"]:
+        move = game["board"].parse_uci(move_uci)
+        node = node.add_variation(move)
 
-@app.post("/start")
+    chess_game.headers["Event"] = "Online Chess Game"
+    chess_game.headers["Date"] = datetime.utcnow().strftime("%Y.%m.%d")
+    chess_game.headers["Result"] = game["board"].result()
+
+    print("[DEBUG] Preparing PGN for game:", game_id)
+    print(chess_game)
+
+    # Convert to PGN text
+    pgn_text = str(chess_game)
+
+    # Define GitHub file path
+    filename = f"{SAVE_FOLDER}/game_{game_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pgn"
+
+    # GitHub API endpoint
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{filename}"
+
+    # Prepare commit
+    commit_message = f"Add finished game {game_id}"
+    content_encoded = pgn_text.encode("utf-8")
+    import base64
+    content_b64 = base64.b64encode(content_encoded).decode("utf-8")
+
+    # API request
+    response = requests.put(
+        url,
+        headers={
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github+json"
+        },
+        json={
+            "message": commit_message,
+            "content": content_b64,
+            "branch": GITHUB_BRANCH
+        }
+    )
+
+    if response.status_code in (200, 201):
+        print(f"[SUCCESS] Game saved to GitHub: {filename}")
+    else:
+        print(f"[ERROR] Failed to save game: {response.status_code}")
+        print(response.text)
+
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.route("/start_game", methods=["POST"])
 def start_game():
-    game_id = str(uuid.uuid4())
-    board = chess.Board()
-    game = chess.pgn.Game()
-    game.headers["Event"] = "FastAPI Chess Game"
-    game.setup(board)
-    games[game_id] = board
-    game_history[game_id] = game
-    return {"game_id": game_id}
+    game_id = str(len(games) + 1)
+    games[game_id] = {"board": chess.Board(), "history": []}
+    return jsonify({"game_id": game_id, "fen": games[game_id]["board"].fen()})
 
-@app.get("/board/{game_id}")
-def get_board(game_id: str):
-    board = games.get(game_id)
-    if not board:
-        return {"error": "Game not found"}
-    return {
-        "fen": board.fen(),
-        "turn": "white" if board.turn == chess.WHITE else "black",
-        "is_check": board.is_check(),
-        "is_checkmate": board.is_checkmate(),
-        "is_stalemate": board.is_stalemate(),
-        "winner": "black" if board.is_checkmate() and board.turn == chess.WHITE else "white" if board.is_checkmate() else None,
-        "is_game_over": board.is_game_over(),
-        "promotion_rank": 6 if board.turn == chess.WHITE else 1
-    }
 
-@app.post("/move")
-def play_move(move: MoveRequest):
-    board = games.get(move.game_id)
-    game = game_history.get(move.game_id)
+@app.route("/move", methods=["POST"])
+def move():
+    data = request.get_json()
+    game_id = data.get("game_id")
+    move_uci = data.get("move")
 
-    if not board or board.is_game_over():
-        return get_board(move.game_id)
+    if game_id not in games:
+        return jsonify({"error": "Game not found"}), 404
 
-    move_uci = move.from_square + move.to_square
-    from_sq = chess.parse_square(move.from_square)
-    to_sq = chess.parse_square(move.to_square)
-    piece = board.piece_at(from_sq)
-
-    # Handle promotion
-    if piece and piece.piece_type == chess.PAWN and (chess.square_rank(to_sq) == 0 or chess.square_rank(to_sq) == 7):
-        if move.promotion:
-            move_uci += move.promotion.lower()
-        else:
-            return {"error": "Promotion required"}
+    board = games[game_id]["board"]
 
     try:
-        uci_move = chess.Move.from_uci(move_uci)
-        if uci_move in board.legal_moves:
-            board.push(uci_move)
-            game = record_move(game, uci_move)
+        move = board.parse_uci(move_uci)
+        if move not in board.legal_moves:
+            return jsonify({"error": "Illegal move"}), 400
+        board.push(move)
+        games[game_id]["history"].append(move_uci)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
-            # AI Move
-            if not board.is_game_over():
-                legal_moves = list(board.legal_moves)
-                if legal_moves:
-                    ai_move = random.choice(legal_moves)
-                    board.push(ai_move)
-                    game = record_move(game, ai_move)
-    except:
-        pass
-
-    # Save game if it's over
+    # Check game end
     if board.is_game_over():
-        print("a")
-        save_game_to_file(move.game_id, game)
-        print("a")
+        save_game_to_github(game_id, games[game_id])
 
-    return get_board(move.game_id)
+    return jsonify({"fen": board.fen(), "game_over": board.is_game_over()})
 
-def record_move(game: chess.pgn.Game, move: chess.Move) -> chess.pgn.Game:
-    if game is None:
-        return None
-    node = game
-    while node.variations:
-        node = node.variations[0]
-    return node.add_variation(move).game()
-
-def save_game_to_file(game_id: str, game: chess.pgn.Game):
-    filepath = f"saved_games/{game_id}.pgn"
-    with open(filepath, "w", encoding="utf-8") as f:
-        exporter = chess.pgn.FileExporter(f)
-        game.accept(exporter)
-
-@app.post("/restart/{game_id}")
-def restart_game(game_id: str):
-    board = chess.Board()
-    game = chess.pgn.Game()
-    game.headers["Event"] = "FastAPI Chess Game"
-    game.setup(board)
-    games[game_id] = board
-    game_history[game_id] = game
-    return get_board(game_id)
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    app.run(debug=True)
+
 
 
 
