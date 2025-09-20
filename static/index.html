@@ -106,7 +106,7 @@
   }
 
   async function loadBoard() {
-    const res = await fetch(/board/${gameId});
+    const res = await fetch(`/board/${gameId}`);
     const data = await res.json();
     const fen = data.fen.split(' ')[0];
     const rows = fen.split('/');
@@ -155,7 +155,7 @@
 
     if (data.is_checkmate || data.is_stalemate) {
       document.getElementById("winner-text").innerText =
-        data.is_checkmate ? Checkmate! Winner: ${data.winner} : "Stalemate!";
+        data.is_checkmate ? `Checkmate! Winner: ${data.winner}` : "Stalemate!";
       document.getElementById("winner-popup").style.display = "block";
     }
   }
@@ -179,7 +179,7 @@
 
     if (promotionRank) {
       // check if it's a pawn moving to last rank
-      const res = await fetch(/board/${gameId});
+      const res = await fetch(`/board/${gameId}`);
       const data = await res.json();
       const boardFen = data.fen.split(' ')[0];
       const index = (8 - parseInt(from[1])) * 8 + "abcdefgh".indexOf(from[0]);
@@ -223,7 +223,7 @@
   }
 
   async function restart() {
-    await fetch(/restart/${gameId}, { method: "POST" });
+    await fetch(`/restart/${gameId}`, { method: "POST" });
     document.getElementById("winner-popup").style.display = "none";
     loadBoard();
   }
@@ -237,10 +237,3 @@
 
 </body>
 </html>
-
-
-
-</body>
-</html>
-
-
