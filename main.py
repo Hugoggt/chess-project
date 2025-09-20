@@ -2,39 +2,39 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict
 import random
 import uvicorn
+import uuid
 import chess
-import requests
-import json
-import datetime
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-board = chess.Board()
-
-# Store all moves in UCI format for saving later
-game_moves = []
-
-# --- ADD YOUR GITHUB INFO HERE ---
-GITHUB_TOKEN = "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"
-REPO_NAME = "Hugoggt/chess-project"
-BRANCH = "main"  # or your default branch
+games: Dict[str, chess.Board] = {}
 
 class MoveRequest(BaseModel):
-    from_square: str  # like 'e2'
-    to_square: str    # like 'e4'
-    promotion: Optional[str] = None  # 'q', 'r', 'b', or 'n'
+    game_id: str
+    from_square: str
+    to_square: str
+    promotion: Optional[str] = None
 
 @app.get("/", response_class=HTMLResponse)
 def get_index():
     with open("static/index.html", "r", encoding="utf-8") as f:
         return f.read()
 
-@app.get("/board")
-def get_board():
+@app.post("/start")
+def start_game():
+    game_id = str(uuid.uuid4())
+    games[game_id] = chess.Board()
+    return {"game_id": game_id}
+
+@app.get("/board/{game_id}")
+def get_board(game_id: str):
+    board = games.get(game_id)
+    if not board:
+        return {"error": "Game not found"}
     return {
         "fen": board.fen(),
         "turn": "white" if board.turn == chess.WHITE else "black",
@@ -43,112 +43,48 @@ def get_board():
         "is_stalemate": board.is_stalemate(),
         "winner": "black" if board.is_checkmate() and board.turn == chess.WHITE else "white" if board.is_checkmate() else None,
         "is_game_over": board.is_game_over(),
+        "promotion_rank": 6 if board.turn == chess.WHITE else 1
     }
-
-def save_game_to_github(moves_list, outcome):
-    # Compose filename with timestamp
-    now_str = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    filename = f"saved_games/game_{now_str}.json"
-
-    # Compose game data to save
-    data = {
-        "moves": moves_list,
-        "outcome": outcome,
-        "timestamp_utc": now_str,
-    }
-
-    # GitHub API URL to create/update a file
-    url = f"https://api.github.com/repos/{REPO_NAME}/contents/{filename}"
-
-    # First, get the SHA if the file exists (to update)
-    headers = {
-        "Authorization": f"token {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github+json",
-    }
-    get_resp = requests.get(url, headers=headers)
-    sha = None
-    if get_resp.status_code == 200:
-        sha = get_resp.json().get("sha")
-
-    # Prepare commit message and content
-    content_str = json.dumps(data, indent=2)
-    content_bytes = content_str.encode("utf-8")
-    import base64
-    content_b64 = base64.b64encode(content_bytes).decode("utf-8")
-
-    payload = {
-        "message": f"Save finished chess game at {now_str}",
-        "content": content_b64,
-        "branch": BRANCH,
-    }
-    if sha:
-        payload["sha"] = sha
-
-    resp = requests.put(url, headers=headers, json=payload)
-
-    if resp.status_code in [200, 201]:
-        print(f"Game saved to GitHub in {filename}")
-    else:
-        print(f"Failed to save game to GitHub: {resp.status_code} {resp.text}")
 
 @app.post("/move")
 def play_move(move: MoveRequest):
-    global game_moves
-
-    if board.is_game_over():
-        return get_board()
+    board = games.get(move.game_id)
+    if not board or board.is_game_over():
+        return get_board(move.game_id)
 
     move_uci = move.from_square + move.to_square
-    if move.promotion:
-        move_uci += move.promotion.lower()
+    from_sq = chess.parse_square(move.from_square)
+    to_sq = chess.parse_square(move.to_square)
+    piece = board.piece_at(from_sq)
+
+    # Handle promotion properly
+    if piece and piece.piece_type == chess.PAWN and (chess.square_rank(to_sq) == 0 or chess.square_rank(to_sq) == 7):
+        if move.promotion:
+            move_uci += move.promotion.lower()
+        else:
+            return {"error": "Promotion required"}
 
     try:
         uci_move = chess.Move.from_uci(move_uci)
         if uci_move in board.legal_moves:
             board.push(uci_move)
-            game_moves.append(uci_move.uci())
-
+            # AI move
             if not board.is_game_over():
                 legal_moves = list(board.legal_moves)
                 if legal_moves:
-                    comp_move = random.choice(legal_moves)
-                    board.push(comp_move)
-                    game_moves.append(comp_move.uci())
-
-            # If game just ended, save the full game
-            if board.is_game_over():
-                # Determine outcome string
-                if board.is_checkmate():
-                    winner = "black" if board.turn == chess.WHITE else "white"
-                    outcome = f"{winner} wins by checkmate"
-                elif board.is_stalemate():
-                    outcome = "Draw by stalemate"
-                elif board.is_insufficient_material():
-                    outcome = "Draw by insufficient material"
-                elif board.can_claim_threefold_repetition():
-                    outcome = "Draw by threefold repetition"
-                else:
-                    outcome = "Game over"
-
-                save_game_to_github(game_moves, outcome)
-                # Reset game_moves for next game
-                game_moves = []
-
+                    board.push(random.choice(legal_moves))
     except:
-        pass  # ignore illegal or invalid moves
+        pass
 
-    return get_board()
+    return get_board(move.game_id)
 
-@app.post("/restart")
-def restart_game():
-    global board, game_moves
-    board = chess.Board()
-    game_moves = []
-    return get_board()
+@app.post("/restart/{game_id}")
+def restart_game(game_id: str):
+    games[game_id] = chess.Board()
+    return get_board(game_id)
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-
 
 
 
